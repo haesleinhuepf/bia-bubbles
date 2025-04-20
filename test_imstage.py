@@ -189,19 +189,195 @@ class ImageScatter:
         """Set the original filename of the image."""
         self.filename = filename
 
+    def render(self, surface):
+        """Render this image on the given surface.
+        
+        Args:
+            surface: The pygame surface to render on
+        """
+        # Get the current position
+        pos = self.get_pos()
+        
+        # Apply transformations
+        transformed_surface = pygame.transform.rotozoom(self.surface, 0, 1.0)  # No rotation or scale for now
+        
+        # Create a circular mask
+        mask_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
+        radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
+        
+        # If this image is animating, scale the radius
+        if self.is_animating:
+            radius *= self.animation_scale
+        
+        center = (transformed_surface.get_width() // 2, transformed_surface.get_height() // 2)
+        pygame.draw.circle(mask_surface, (255, 255, 255, 255), center, radius)
+        
+        # Create a temporary surface for the masked image
+        temp_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
+        temp_surface.blit(transformed_surface, (0, 0))
+        
+        # Apply the mask
+        temp_surface.blit(mask_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        
+        # Get the rect for the masked image
+        rect = temp_surface.get_rect(center=pos)
+        
+        # Render the masked image
+        surface.blit(temp_surface, rect)
+        
+        # Draw white outline around the circle
+        pygame.draw.circle(surface, (255, 255, 255), pos, radius, 2)
+        
+        # Render name if provided
+        if self.name:
+            self.render_name(surface, pos, radius)
+        elif self.function_name:
+            self.render_name(surface, pos, radius, is_proposal=True)
+
+    def render_name(self, surface, pos, radius, is_proposal=False):
+        """Render the name of this image.
+        
+        Args:
+            surface: The pygame surface to render on
+            pos: Position of the image
+            radius: Radius of the image circle
+            is_proposal: Whether this is a proposal name (True) or an image name (False)
+        """
+        # Create a font for the name
+        font = pygame.font.Font(None, 24)
+        
+        # Get the name to display
+        name = self.function_name if is_proposal else self.name
+        
+        # Extract just the name part after the "/"
+        display_name = name.split('/')[-1] if '/' in name else name
+        
+        # Split by "_" for multi-line display
+        lines = display_name.split('_')
+        
+        # Calculate total height of all lines
+        line_height = font.get_linesize()
+        total_height = line_height * len(lines)
+        
+        # Calculate starting y position to center all lines vertically
+        start_y = pos[1] - (total_height - line_height) / 2
+        
+        # Render each line
+        for i, line in enumerate(lines):
+            # Create text surfaces for this line
+            text_white = font.render(line, True, (255, 255, 255))
+            text_black = font.render(line, True, (0, 0, 0))
+            
+            # Calculate y position for this line
+            line_y = start_y + i * line_height
+            
+            # Get the rects for all text surfaces
+            text_rect_white_tl = text_white.get_rect(center=(pos[0] - 1, line_y - 1))  # Top-left
+            text_rect_white_tr = text_white.get_rect(center=(pos[0] + 1, line_y - 1))  # Top-right
+            text_rect_white_bl = text_white.get_rect(center=(pos[0] - 1, line_y + 1))  # Bottom-left
+            text_rect_white_br = text_white.get_rect(center=(pos[0] + 1, line_y + 1))  # Bottom-right
+            text_rect_black = text_black.get_rect(center=(pos[0], line_y))  # Center
+            
+            # Render all text surfaces for this line
+            surface.blit(text_white, text_rect_white_tl)
+            surface.blit(text_white, text_rect_white_tr)
+            surface.blit(text_white, text_rect_white_bl)
+            surface.blit(text_white, text_rect_white_br)
+            surface.blit(text_black, text_rect_black)
+    
+    def screen_to_world(self, screen_pos):
+        """Convert screen coordinates to world coordinates"""
+        # Subtract the view offset to get world coordinates
+        return (screen_pos[0] - self.view_offset_x, screen_pos[1] - self.view_offset_y)
+        
+    def point_in_image(self, point, img_id, is_proposal=False):
+        """Check if a point is within an image"""
+        # Get the appropriate surface and position based on whether it's a proposal or not
+        if is_proposal:
+            surface = self.temporary_proposals[img_id].get_surface()
+            pos = self.temporary_proposals[img_id].get_pos()
+        else:
+            surface = self.images[img_id].get_surface()
+            pos = self.images[img_id].get_pos()
+            
+        # Apply view offset to position
+        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
+        
+        # Apply transformations
+        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
+        rect = transformed_surface.get_rect(center=adjusted_pos)
+        
+        # For proposals, check if point is within a certain radius of the center
+        if is_proposal:
+            # Calculate distance from point to center
+            dx = point[0] - adjusted_pos[0]
+            dy = point[1] - adjusted_pos[1]
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            # Use a radius based on the surface size
+            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
+            
+            # If this is a proposal and it's animating, scale the radius
+            if is_proposal and self.temporary_proposals[img_id].is_animating:
+                radius *= self.temporary_proposals[img_id].animation_scale
+                
+            return distance <= radius
+        else:
+            # For regular images, use the rect collision
+            screen_point = (point[0] + self.view_offset_x, point[1] + self.view_offset_y)
+            return rect.collidepoint(screen_point)
+        
+    def distance_to_image(self, point, img_id, is_proposal=False):
+        """Calculate the distance from a point to the center of an image"""
+        # Get the appropriate image object based on whether it's a proposal or not
+        if is_proposal:
+            img_obj = self.temporary_proposals[img_id]
+        else:
+            img_obj = self.images[img_id]
+            
+        # Get the surface and position
+        surface = img_obj.get_surface()
+        pos = img_obj.get_pos()
+        
+        # Apply transformations to get the transformed surface
+        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
+        
+        # Apply view offset to position
+        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
+        
+        # Get the rect of the transformed surface centered at the adjusted position
+        rect = transformed_surface.get_rect(center=adjusted_pos)
+        
+        # Get the center of the rect (which is the center of the image)
+        image_center = rect.center
+        
+        # Calculate distance between point and image center
+        dx = point[0] - image_center[0]
+        dy = point[1] - image_center[1]
+        distance = (dx*dx + dy*dy) ** 0.5
+        
+        # Scale the distance by the current zoom level to maintain consistent visual distance
+        #distance = distance * self.scale
+        
+        return distance
+
 
 class ImageProcessingCanvas:
     def __init__(self, width=800, height=600, function_collection=None):
         pygame.init()
         # Set window title
         pygame.display.set_caption("Fun with Images")
-        # Create resizable window
-        self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+        # Create resizable window with drag and drop support
+        self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE | pygame.DROPFILE)
         self.clock = pygame.time.Clock()
         
         self.images = {}  # {id: ImageScatter}
         self.connections = []
         self.temporary_proposals = {}  # {id: ImageScatter}
+        
+        # Add title property
+        self.title = None
+        self.title_font = pygame.font.Font(None, 36)  # Larger font for title
         
         # Add save button properties
         self.save_button_rect = pygame.Rect(10, height - 40, 100, 30)
@@ -253,7 +429,7 @@ class ImageProcessingCanvas:
         
         self.function_collection = function_collection or {}
         
-    def add_image(self, array, parent_id=None, pos=None, image_type=None, filename=None):
+    def add_image(self, array, parent_id=None, pos=None, image_type=None, filename=None, name=None):
         """Add a new image to the canvas.
         
         Args:
@@ -262,6 +438,7 @@ class ImageProcessingCanvas:
             pos: Position to place the image at (if None, will be centered)
             image_type: Type of the image ('intensity', 'binary', or 'label'). If None, will be determined automatically.
             filename: Original filename of the image (if loaded from file)
+            name: Display name of the image
         """
         img_id = len(self.images)
         if pos is None:
@@ -277,14 +454,14 @@ class ImageProcessingCanvas:
                 image_type = 'intensity'
         
         # Set the name based on whether this is the first image or a processed image
-        name = None
-        if img_id == 0:
-            name = "original"
-        elif parent_id is not None and parent_id in self.images:
-            # For processed images, use the function name
-            parent_img = self.images[parent_id]
-            if parent_img.get_function_name():
-                name = parent_img.get_function_name()
+        if name is None:
+            if img_id == 0:
+                name = "original"
+            elif parent_id is not None and parent_id in self.images:
+                # For processed images, use the function name
+                parent_img = self.images[parent_id]
+                if parent_img.get_function_name():
+                    name = parent_img.get_function_name()
             
         image_scatter = ImageScatter(array, pos, parent_id, image_type=image_type, name=name, filename=filename)
         self.images[img_id] = image_scatter
@@ -453,6 +630,16 @@ class ImageProcessingCanvas:
             elif event.type == pygame.VIDEORESIZE:
                 self.width, self.height = event.size
                 self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+            
+            # Handle drag and drop
+            elif event.type == pygame.DROPFILE:
+                filepath = event.file
+                # Check if it's a YAML file
+                if filepath.lower().endswith('.yaml') or filepath.lower().endswith('.yml'):
+                    self.load_yaml_tree(filepath)
+                else:
+                    # Try to load as an image
+                    self.load_image(filepath)
             
             # Handle ESC key to clear proposals
             elif event.type == pygame.KEYDOWN:
@@ -828,28 +1015,56 @@ class ImageProcessingCanvas:
         pygame.quit()
         
     def render(self):
-        """Render all images and proposals"""
-        self.screen.fill((0, 0, 0))  # Black background
+        """Render the current state of the canvas."""
+        # Clear the screen
+        self.screen.fill((0, 0, 0))
         
-        # Draw connections between related images
+        # Render the title first
+        self.render_title(self.screen)
+        
+        # Render connections first (so they appear behind the images)
         self.render_connections()
         
-        # Create a list of all items to render (both images and proposals)
-        all_items = []
+        # Render all images
+        for img in self.images.values():
+            img.render(self.screen)
+            
+        # Render temporary proposals
+        for img in self.temporary_proposals.values():
+            img.render(self.screen)
+            
+        # Render save button
+        self.render_save_button()
         
-        # Add permanent images
-        for img_id, img in self.images.items():
-            all_items.append((img.get_surface(), img.get_pos(), None, img.get_name()))
+        # Update the display
+        pygame.display.flip()
+
+    def render_title(self, surface):
+        """Render the title at the top of the screen."""
+        if self.title:
+            # Create a semi-transparent background for the title
+            title_surface = self.title_font.render(self.title, True, (255, 255, 255))
+            title_rect = title_surface.get_rect(center=(self.width // 2, 30))
             
-        # Add temporary proposals
-        for prop in self.temporary_proposals.values():
-            all_items.append((prop.get_surface(), prop.get_pos(), prop.get_function_name(), None))
+            # Create a background rectangle for the title
+            padding = 10
+            bg_rect = pygame.Rect(
+                title_rect.left - padding,
+                title_rect.top - padding,
+                title_rect.width + 2 * padding,
+                title_rect.height + 2 * padding
+            )
             
-        # Render all items using the same method
-        for surface, pos, function_name, image_name in all_items:
-            self.render_image(surface, pos, function_name, image_name)
+            # Draw semi-transparent background
+            bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+            bg_surface.fill((0, 0, 0, 128))  # Black with 50% transparency
+            surface.blit(bg_surface, bg_rect)
             
-        # Draw save button
+            # Draw the title text
+            surface.blit(title_surface, title_rect)
+
+    def render_save_button(self):
+        """Render the save button on the screen."""
         button_color = self.save_button_hover_color if self.save_button_hovered else self.save_button_color
         pygame.draw.rect(self.screen, button_color, self.save_button_rect)
         pygame.draw.rect(self.screen, (255, 255, 255), self.save_button_rect, 2)
@@ -857,7 +1072,7 @@ class ImageProcessingCanvas:
         text_surface = self.save_button_font.render(self.save_button_text, True, (0, 0, 0))
         text_rect = text_surface.get_rect(center=self.save_button_rect.center)
         self.screen.blit(text_surface, text_rect)
-        
+
     def render_image(self, surface, pos, function_name=None, image_name=None):
         """Render a single image at the given position with a circular mask"""
         # Get the current proposal if this is a proposal
@@ -1666,6 +1881,134 @@ class ImageProcessingCanvas:
             
         except Exception as e:
             print(f"Error loading image: {e}")
+
+    def clear_canvas(self):
+        """Clear all images from the canvas."""
+        self.images.clear()
+        self.temporary_proposals.clear()
+        self.proposal_queue.clear()
+        self.is_animating_proposals = False
+        self.start_relaxation()
+
+    def load_yaml_tree(self, filepath):
+        """Load an image tree from a YAML file.
+        
+        Args:
+            filepath: Path to the YAML file to load
+        """
+        try:
+            # Clear the canvas first
+            self.clear_canvas()
+            
+            # Load the YAML file
+            with open(filepath, 'r') as f:
+                tree_data = yaml.safe_load(f)
+                
+            # Extract title if present
+            self.title = tree_data.get('title', None)
+                
+            # Create a mapping of old IDs to new IDs
+            id_mapping = {}
+            
+            def load_node(node_data, parent_id=None):
+                """Recursively load a node and its children."""
+                # Get the image type and name
+                image_type = node_data.get('type', 'intensity')
+                name = node_data.get('name', None)
+                
+                # If this is a processed image (has a name with category/function format)
+                if name and '/' in name:
+                    category, function_name = name.split('/')
+                    
+                    # Try to find the function in any available image type
+                    function_found = False
+                    
+                    # Loop through all available image types
+                    for type_name, type_functions in self.function_collection.items():
+                        # Check if the category and function exist in this image type
+                        if category in type_functions and function_name in type_functions[category]:
+                            # Get the parent image to process
+                            if parent_id is not None and parent_id in self.images:
+                                parent_img = self.images[parent_id]
+                                # Process the parent image using the function
+                                result_array = type_functions[category][function_name](parent_img.get_array())
+                                # Add the processed image
+                                new_id = self.add_image(
+                                    result_array,
+                                    parent_id=parent_id,
+                                    pos=(node_data['x'], node_data['y']),
+                                    image_type=image_type,  # Use the type specified in the YAML file
+                                    name=name
+                                )
+                                # Store the ID mapping
+                                id_mapping[node_data['id']] = new_id
+                                
+                                # Load children recursively
+                                if 'children' in node_data:
+                                    for child_data in node_data['children']:
+                                        load_node(child_data, parent_id=new_id)
+                                        
+                                function_found = True
+                                return new_id
+                    
+                    # If we didn't find the function in any image type
+                    if not function_found:
+                        if parent_id is not None and parent_id in self.images:
+                            searched_types = list(self.function_collection.keys())
+                            print(f"Error: Function '{category}/{function_name}' not found in any available image type")
+                            print(f"Available image types: {', '.join(searched_types)}")
+                            print(f"Please check if the function exists in one of these image types")
+                        else:
+                            print(f"Error: Cannot find parent image for processed image '{name}'")
+                
+                # If this is an original image (has a filename)
+                elif 'filename' in node_data and node_data['filename']:
+                    # Load the image file
+                    img = mpimg.imread(node_data['filename'])
+                    
+                    # Convert to grayscale if it's RGB
+                    if len(img.shape) == 3:
+                        img = np.mean(img, axis=2)
+                        
+                    # Normalize to 0-1 range if needed
+                    if img.max() > 1.0:
+                        img = img / 255.0
+                        
+                    # Add the image to the canvas
+                    new_id = self.add_image(
+                        img,
+                        parent_id=parent_id,
+                        pos=(node_data['x'], node_data['y']),
+                        image_type=image_type,
+                        filename=node_data['filename']
+                    )
+                    
+                    # Set the name if provided
+                    if name:
+                        self.images[new_id].set_name(name)
+                        
+                    # Store the ID mapping
+                    id_mapping[node_data['id']] = new_id
+                    
+                    # Load children recursively
+                    if 'children' in node_data:
+                        for child_data in node_data['children']:
+                            load_node(child_data, parent_id=new_id)
+                            
+                    return new_id
+                else:
+                    print(f"Error: Node has no filename and no valid function name: {name}")
+                    
+                return None
+                
+            # Load the tree starting from the root
+            root_id = load_node(tree_data)
+            
+            # Start relaxation to adjust positions
+            self.start_relaxation()
+            
+        except Exception as e:
+            print(f"Error loading YAML file: {e}")
 
 
 # Example image processing functions
