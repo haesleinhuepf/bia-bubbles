@@ -428,6 +428,27 @@ class ImageProcessingCanvas:
         self.save_button_font = pygame.font.Font(None, 24)
         self.save_button_hovered = False
         
+        # Add level button properties
+        self.level_button_rect = pygame.Rect(120, height - 40, 100, 30)  # Positioned next to save button
+        self.level_button_color = (196, 196, 196)
+        self.level_button_hover_color = (128, 128, 128)
+        self.level_button_text = "Level"
+        self.level_button_hovered = False
+        self.level_buttons_visible = False
+        self.level_buttons = []
+        self.level_button_height = 30
+        self.level_button_spacing = 5
+        
+        # Create level selection buttons (1-9)
+        for i in range(9):
+            button_rect = pygame.Rect(
+                self.level_button_rect.x,
+                self.level_button_rect.y - (i + 1) * (self.level_button_height + self.level_button_spacing),
+                self.level_button_rect.width,
+                self.level_button_height
+            )
+            self.level_buttons.append(button_rect)
+        
         # Add proposal animation tracking
         self.proposal_queue = []  # Queue of proposals to animate
         self.last_proposal_time = 0  # Time of last proposal animation
@@ -448,9 +469,7 @@ class ImageProcessingCanvas:
         self.initial_touch_distance = 0
         self.initial_touch_angle = 0
         
-        # Add panning variables
-        self.panning = False
-        self.pan_start = None
+        # Add view offset variables (needed for coordinate calculations)
         self.view_offset_x = 0
         self.view_offset_y = 0
         
@@ -671,6 +690,13 @@ class ImageProcessingCanvas:
             elif event.type == pygame.VIDEORESIZE:
                 self.width, self.height = event.size
                 self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+                # Update button positions
+                self.save_button_rect.bottom = self.height - 10
+                self.level_button_rect.bottom = self.height - 10
+                # Update level selection buttons
+                for i, button_rect in enumerate(self.level_buttons):
+                    button_rect.x = self.level_button_rect.x
+                    button_rect.y = self.level_button_rect.y - (i + 1) * (self.level_button_height + self.level_button_spacing)
             
             # Handle drag and drop
             elif event.type == pygame.DROPFILE:
@@ -693,6 +719,10 @@ class ImageProcessingCanvas:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
+                    # Check if level button was clicked
+                    if self.handle_level_button_click(event.pos):
+                        continue
+                        
                     # Check if save button was clicked
                     if self.save_button_rect.collidepoint(event.pos):
                         self.save_image_tree()
@@ -757,7 +787,7 @@ class ImageProcessingCanvas:
                 
                 elif event.button == 3:  # Right click
                     # Check if we clicked on an image
-                    if self.point_in_image(event.pos, self.clicked_image_id):
+                    if self.clicked_image_id is not None and self.clicked_image_id in self.images:
                         # If we clicked on an image, handle rotation
                         self.dragging = True
                         self.drag_start = event.pos
@@ -768,8 +798,7 @@ class ImageProcessingCanvas:
                         self.pan_start = event.pos
                 
                 elif event.button == 2:  # Middle click
-                    self.panning = True
-                    self.pan_start = event.pos
+                    pass  # Disabled middle click panning
             
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:  # Left click
@@ -797,7 +826,7 @@ class ImageProcessingCanvas:
                     self.dragging = False
                     self.panning = False
                 elif event.button == 2:  # Middle click
-                    self.panning = False
+                    pass  # Disabled middle click panning
             
             elif event.type == pygame.MOUSEMOTION:
                 # Check if left mouse button is pressed
@@ -836,36 +865,15 @@ class ImageProcessingCanvas:
                             self.dragged_image_id = None
                             self.clicked_image_id = None
                             self.click_start_pos = None
-                    elif self.panning and self.clicked_image_id is None:  # Only pan if we're not clicking on an image
-                        dx = event.pos[0] - self.pan_start[0]
-                        dy = event.pos[1] - self.pan_start[1]
-                        self.view_offset_x += dx
-                        self.view_offset_y += dy
-                        self.pan_start = event.pos
                 # Check if middle mouse button is pressed
                 elif pygame.mouse.get_pressed()[1]:  # Middle button
-                    if not self.panning:
-                        self.panning = True
-                        self.pan_start = event.pos
-                    else:
-                        dx = event.pos[0] - self.pan_start[0]
-                        dy = event.pos[1] - self.pan_start[1]
-                        self.view_offset_x += dx
-                        self.view_offset_y += dy
-                        self.pan_start = event.pos
+                    pass  # Disabled middle button panning
                 # Check if right mouse button is pressed
                 elif pygame.mouse.get_pressed()[2]:  # Right button
                     if self.dragging:
                         # Handle rotation
                         dx = event.pos[0] - self.drag_start[0]
                         self.rotation = self.initial_rotation + dx * 0.01
-                    elif self.panning:
-                        # Handle panning
-                        dx = event.pos[0] - self.pan_start[0]
-                        dy = event.pos[1] - self.pan_start[1]
-                        self.view_offset_x += dx
-                        self.view_offset_y += dy
-                        self.pan_start = event.pos
             
             elif event.type == pygame.MOUSEWHEEL:
                 # Get mouse position before zoom
@@ -885,15 +893,9 @@ class ImageProcessingCanvas:
                 if len(self.touch_points) == 2:
                     # Two fingers down - enable multi-touch and disable panning
                     self.multi_touch = True
-                    self.panning = False  # Disable panning when multi-touch is active
                     self.initial_touch_distance = dist(*self.touch_points)
                     self.initial_touch_angle = atan2(self.touch_points[1][1] - self.touch_points[0][1],
                                                    self.touch_points[1][0] - self.touch_points[0][0])
-                else:
-                    # Single touch for panning
-                    self.panning = True
-                    self.multi_touch = False  # Disable multi-touch when panning is active
-                    self.pan_start = touch_pos
             
             elif event.type == pygame.FINGERUP:
                 # Remove the finger that was lifted
@@ -903,16 +905,11 @@ class ImageProcessingCanvas:
                 
                 # Update touch states based on remaining fingers
                 if len(self.touch_points) == 0:
-                    # No fingers left - disable both panning and multi-touch
-                    self.panning = False
+                    # No fingers left - disable multi-touch
                     self.multi_touch = False
                 elif len(self.touch_points) == 1:
-                    # One finger left - enable panning and disable multi-touch
-                    self.panning = True
+                    # One finger left - disable multi-touch
                     self.multi_touch = False
-                    # Update pan start position to the remaining finger
-                    self.pan_start = self.touch_points[0]
-                # If two fingers remain, multi-touch stays enabled
             
             elif event.type == pygame.FINGERMOTION:
                 # Update the touch points list with the current position
@@ -925,7 +922,6 @@ class ImageProcessingCanvas:
                 if len(self.touch_points) >= 2:
                     # We have multiple fingers - handle multi-touch for zoom and rotation
                     self.multi_touch = True
-                    self.panning = False  # Disable panning when multi-touch is active
                     
                     # Use only the first two touch points for calculations
                     # This ensures we don't get more than 2 arguments for dist()
@@ -964,19 +960,6 @@ class ImageProcessingCanvas:
                     # Update initial values for next frame
                     self.initial_touch_distance = current_distance
                     self.initial_touch_angle = current_angle
-                elif len(self.touch_points) == 1:
-                    # Single finger - handle panning
-                    self.multi_touch = False
-                    self.panning = True
-                    
-                    # Handle single-touch for panning
-                    current_pos = (event.x * self.screen.get_width(),
-                                 event.y * self.screen.get_height())
-                    dx = current_pos[0] - self.pan_start[0]
-                    dy = current_pos[1] - self.pan_start[1]
-                    self.view_offset_x += dx
-                    self.view_offset_y += dy
-                    self.pan_start = current_pos
         
         return True
 
@@ -1073,15 +1056,16 @@ class ImageProcessingCanvas:
         # Render images
         for img_id, img in self.images.items():
             img.render(self.screen, self.scale)
-            # No need to call render_name here as it's already called inside render
         
         # Render temporary proposals
         for prop_id, prop in self.temporary_proposals.items():
             prop.render(self.screen, self.scale)
-            # No need to call render_name here as it's already called inside render
         
         # Render the save button
         self.render_save_button()
+        
+        # Render the level buttons
+        self.render_level_buttons()
         
         # Update the display
         pygame.display.flip()
@@ -1825,8 +1809,7 @@ class ImageProcessingCanvas:
                     self.pan_start = event.pos
             
             elif event.button == 2:  # Middle click
-                self.panning = True
-                self.pan_start = event.pos
+                pass  # Disabled middle click panning
         
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:  # Left click
@@ -1854,11 +1837,13 @@ class ImageProcessingCanvas:
                 self.dragging = False
                 self.panning = False
             elif event.button == 2:  # Middle click
-                self.panning = False
+                pass  # Disabled middle click panning
         
         elif event.type == pygame.MOUSEMOTION:
             # Update save button hover state
             self.save_button_hovered = self.save_button_rect.collidepoint(event.pos)
+            # Update level button hover state
+            self.level_button_hovered = self.level_button_rect.collidepoint(event.pos)
             
             # Handle image dragging
             for image in self.images.values():
@@ -2085,6 +2070,54 @@ class ImageProcessingCanvas:
             
         except Exception as e:
             print(f"Error loading YAML file: {e}")
+
+    def render_level_buttons(self):
+        """Render the level button and level selection buttons if visible."""
+        # Render main level button
+        button_color = self.level_button_hover_color if self.level_button_hovered else self.level_button_color
+        pygame.draw.rect(self.screen, button_color, self.level_button_rect)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.level_button_rect, 2)
+        
+        text_surface = self.save_button_font.render(self.level_button_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=self.level_button_rect.center)
+        self.screen.blit(text_surface, text_rect)
+        
+        # Render level selection buttons if visible
+        if self.level_buttons_visible:
+            for i, button_rect in enumerate(self.level_buttons, 1):
+                pygame.draw.rect(self.screen, self.level_button_color, button_rect)
+                pygame.draw.rect(self.screen, (255, 255, 255), button_rect, 2)
+                
+                text_surface = self.save_button_font.render(str(i), True, (0, 0, 0))
+                text_rect = text_surface.get_rect(center=button_rect.center)
+                self.screen.blit(text_surface, text_rect)
+
+    def handle_level_button_click(self, pos):
+        """Handle clicks on the level button and level selection buttons."""
+        # Check if main level button was clicked
+        if self.level_button_rect.collidepoint(pos):
+            self.level_buttons_visible = not self.level_buttons_visible
+            return True
+            
+        # Check if any level selection button was clicked
+        if self.level_buttons_visible:
+            for i, button_rect in enumerate(self.level_buttons, 1):
+                if button_rect.collidepoint(pos):
+                    # Load the corresponding level file
+                    level_file = f"level{i}.yaml"
+                    try:
+                        self.load_yaml_tree(level_file)
+                    except Exception as e:
+                        print(f"Error loading level file {level_file}: {e}")
+                    self.level_buttons_visible = False
+                    return True
+                    
+        # If clicked outside level buttons, hide them
+        if self.level_buttons_visible:
+            self.level_buttons_visible = False
+            return True
+            
+        return False
 
 
 # Example image processing functions
