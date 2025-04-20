@@ -6,11 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import math
 import pyclesperanto as cle
+import yaml
+import os
+import datetime
 
 class ImageScatter:
     """A class that represents an image on the canvas with both numpy array and pygame surface representations."""
     
-    def __init__(self, array, pos=None, parent_id=None, function_name=None, image_type=None, name=None):
+    def __init__(self, array, pos=None, parent_id=None, function_name=None, image_type=None, name=None, filename=None):
         """Initialize an ImageScatter with a numpy array.
         
         Args:
@@ -20,6 +23,7 @@ class ImageScatter:
             function_name: Name of the function used to process the image
             image_type: Type of the image ('intensity', 'binary', or 'label')
             name: Display name of the image
+            filename: Original filename of the image (if loaded from file)
         """
         self.array = array
         self.pos = pos
@@ -27,6 +31,7 @@ class ImageScatter:
         self.function_name = function_name
         self.image_type = image_type
         self.name = name
+        self.filename = filename
         
         # Add velocity and momentum tracking
         self.velocity = [0.0, 0.0]  # Current velocity [x, y]
@@ -58,8 +63,6 @@ class ImageScatter:
             
         # Convert to uint8 for pygame
         display_array = display_array.astype(np.uint8)
-        print(f"Final display array shape: {display_array.shape}")
-        print(f"Final display array min: {display_array.min()}, max: {display_array.max()}")
             
         self.surface = pygame.surfarray.make_surface(display_array)
         
@@ -178,6 +181,14 @@ class ImageScatter:
         """Get how quickly this image follows its target (0-1)."""
         return self.follow_delay
 
+    def get_filename(self):
+        """Get the original filename of the image."""
+        return self.filename
+        
+    def set_filename(self, filename):
+        """Set the original filename of the image."""
+        self.filename = filename
+
 
 class ImageProcessingCanvas:
     def __init__(self, width=800, height=600, function_collection=None):
@@ -191,6 +202,14 @@ class ImageProcessingCanvas:
         self.images = {}  # {id: ImageScatter}
         self.connections = []
         self.temporary_proposals = {}  # {id: ImageScatter}
+        
+        # Add save button properties
+        self.save_button_rect = pygame.Rect(10, height - 40, 100, 30)
+        self.save_button_color = (196, 196, 196) 
+        self.save_button_hover_color = (128, 128, 128)  
+        self.save_button_text = "Save"
+        self.save_button_font = pygame.font.Font(None, 24)
+        self.save_button_hovered = False
         
         # Add proposal animation tracking
         self.proposal_queue = []  # Queue of proposals to animate
@@ -234,7 +253,7 @@ class ImageProcessingCanvas:
         
         self.function_collection = function_collection or {}
         
-    def add_image(self, array, parent_id=None, pos=None, image_type=None):
+    def add_image(self, array, parent_id=None, pos=None, image_type=None, filename=None):
         """Add a new image to the canvas.
         
         Args:
@@ -242,6 +261,7 @@ class ImageProcessingCanvas:
             parent_id: ID of the parent image (if this is a processed result)
             pos: Position to place the image at (if None, will be centered)
             image_type: Type of the image ('intensity', 'binary', or 'label'). If None, will be determined automatically.
+            filename: Original filename of the image (if loaded from file)
         """
         img_id = len(self.images)
         if pos is None:
@@ -266,7 +286,7 @@ class ImageProcessingCanvas:
             if parent_img.get_function_name():
                 name = parent_img.get_function_name()
             
-        image_scatter = ImageScatter(array, pos, parent_id, image_type=image_type, name=name)
+        image_scatter = ImageScatter(array, pos, parent_id, image_type=image_type, name=name, filename=filename)
         self.images[img_id] = image_scatter
         return img_id
         
@@ -337,7 +357,6 @@ class ImageProcessingCanvas:
                 base_distance = 250
             if total_functions > 15:
                 base_distance = 300
-            print("base_distance", base_distance)
                 
             # Scale the base distance by the current zoom level to maintain consistent visual distance
             base_distance = base_distance * self.scale
@@ -398,7 +417,7 @@ class ImageProcessingCanvas:
             str: 'intensity', 'binary', or 'label'
         """
         # Threshold functions convert intensity to binary
-        if input_type == 'intensity' and category == 'threshold':
+        if input_type == 'intensity' and category == 'binarization':
             return 'binary'
             
         # Connected components convert binary to label
@@ -446,17 +465,19 @@ class ImageProcessingCanvas:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
-                    # Convert screen position to world position
-                    world_pos = self.screen_to_world(event.pos)
+                    # Check if save button was clicked
+                    if self.save_button_rect.collidepoint(event.pos):
+                        self.save_image_tree()
+                        # Don't return here, just continue with the rest of the method
                     
                     # Check temporary proposals first
                     closest_proposal_id = None
                     closest_distance = float('inf')
                     
                     for prop_id, prop in self.temporary_proposals.items():
-                        if self.point_in_image(world_pos, prop_id, is_proposal=True):
+                        if self.point_in_image(event.pos, prop_id, is_proposal=True):
                             # Calculate distance to this proposal
-                            distance = self.distance_to_image(world_pos, prop_id, is_proposal=True)
+                            distance = self.distance_to_image(event.pos, prop_id, is_proposal=True)
                             if distance < closest_distance:
                                 closest_distance = distance
                                 closest_proposal_id = prop_id
@@ -484,40 +505,31 @@ class ImageProcessingCanvas:
                     else:
                         image_clicked = False
                         for img_id in self.images:
-                            if self.point_in_image(world_pos, img_id):
+                            if self.point_in_image(event.pos, img_id):
                                 # Store click information for potential drag or click
                                 self.click_start_time = pygame.time.get_ticks()
-                                self.click_start_pos = world_pos
+                                self.click_start_pos = event.pos
                                 self.clicked_image_id = img_id
                                 # Calculate offset from mouse to image center for potential drag
                                 img_pos = self.images[img_id].get_pos()
-                                self.drag_offset = (img_pos[0] - world_pos[0], img_pos[1] - world_pos[1])
+                                self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
                                 image_clicked = True
                                 break
                         
-                        # If no image was clicked and we have proposals, clear them
+                        # If no image was clicked and we have proposals, clear them and start panning
                         if not image_clicked and self.temporary_proposals:
                             self.temporary_proposals.clear()
-                            # Start relaxation after clearing proposals
                             self.start_relaxation()
-                            # Allow panning with left mouse button
                             self.panning = True
                             self.pan_start = event.pos
-                        # If no image was clicked and no proposals, allow panning
+                        # If no image was clicked and no proposals, just start panning
                         elif not image_clicked:
                             self.panning = True
                             self.pan_start = event.pos
                 
                 elif event.button == 3:  # Right click
                     # Check if we clicked on an image
-                    world_pos = self.screen_to_world(event.pos)
-                    image_clicked = False
-                    for img_id in self.images:
-                        if self.point_in_image(world_pos, img_id):
-                            image_clicked = True
-                            break
-                    
-                    if image_clicked:
+                    if self.point_in_image(event.pos, self.clicked_image_id):
                         # If we clicked on an image, handle rotation
                         self.dragging = True
                         self.drag_start = event.pos
@@ -775,6 +787,34 @@ class ImageProcessingCanvas:
             new_dy = dy * zoom_factor
             # Set new position
             item.set_pos((point[0] + new_dx, point[1] + new_dy))
+            
+        # If we have proposals, ensure they maintain the same distance from their parent
+        if self.temporary_proposals:
+            # Get the parent image ID from any proposal (they all have the same parent)
+            parent_id = next(iter(self.temporary_proposals.values())).get_parent_id()
+            if parent_id in self.images:
+                parent_pos = self.images[parent_id].get_pos()
+                
+                # Calculate the original distance from parent to each proposal
+                for prop_id, prop in self.temporary_proposals.items():
+                    prop_pos = prop.get_pos()
+                    # Calculate vector from parent to proposal
+                    dx = prop_pos[0] - parent_pos[0]
+                    dy = prop_pos[1] - parent_pos[1]
+                    # Calculate distance
+                    distance = (dx*dx + dy*dy) ** 0.5
+                    
+                    # Calculate angle
+                    angle = atan2(dy, dx)
+                    
+                    # Calculate new position maintaining the same angle but with adjusted distance
+                    # We need to scale the distance by the zoom factor to maintain visual consistency
+                    new_distance = distance * zoom_factor
+                    new_x = parent_pos[0] + cos(angle) * new_distance
+                    new_y = parent_pos[1] + sin(angle) * new_distance
+                    
+                    # Set new position
+                    prop.set_pos((new_x, new_y))
 
     def run(self):
         """Main game loop"""
@@ -808,6 +848,15 @@ class ImageProcessingCanvas:
         # Render all items using the same method
         for surface, pos, function_name, image_name in all_items:
             self.render_image(surface, pos, function_name, image_name)
+            
+        # Draw save button
+        button_color = self.save_button_hover_color if self.save_button_hovered else self.save_button_color
+        pygame.draw.rect(self.screen, button_color, self.save_button_rect)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.save_button_rect, 2)
+        
+        text_surface = self.save_button_font.render(self.save_button_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=self.save_button_rect.center)
+        self.screen.blit(text_surface, text_rect)
         
     def render_image(self, surface, pos, function_name=None, image_name=None):
         """Render a single image at the given position with a circular mask"""
@@ -878,6 +927,7 @@ class ImageProcessingCanvas:
         # Extract just the name part after the "/"
         display_name = name.split('/')[-1] if '/' in name else name
         
+    
     
         # For images, position text at the center with white outline
         # Position text at the center of the image
@@ -1395,6 +1445,228 @@ class ImageProcessingCanvas:
         
         return child_ids
 
+    def draw(self):
+        self.screen.fill((255, 255, 255))
+        
+        # Draw connections first
+        for connection in self.connections:
+            pygame.draw.line(self.screen, (0, 0, 0), connection[0], connection[1], 2)
+        
+        # Draw all images
+        for image in self.images.values():
+            image.draw(self.screen)
+        
+        # Draw temporary proposals
+        for proposal in self.temporary_proposals.values():
+            proposal.draw(self.screen)
+            
+        # Draw save button
+        button_color = self.save_button_hover_color if self.save_button_hovered else self.save_button_color
+        pygame.draw.rect(self.screen, button_color, self.save_button_rect)
+        pygame.draw.rect(self.screen, (0, 0, 0), self.save_button_rect, 2)
+        
+        text_surface = self.save_button_font.render(self.save_button_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=self.save_button_rect.center)
+        self.screen.blit(text_surface, text_rect)
+        
+        pygame.display.flip()
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left click
+                # Check if save button was clicked
+                if self.save_button_rect.collidepoint(event.pos):
+                    self.save_image_tree()
+                    # Don't return here, just continue with the rest of the method
+                    
+                # Check temporary proposals first
+                closest_proposal_id = None
+                closest_distance = float('inf')
+                
+                for prop_id, prop in self.temporary_proposals.items():
+                    if self.point_in_image(event.pos, prop_id, is_proposal=True):
+                        # Calculate distance to this proposal
+                        distance = self.distance_to_image(event.pos, prop_id, is_proposal=True)
+                        if distance < closest_distance:
+                            closest_distance = distance
+                            closest_proposal_id = prop_id
+                
+                # If we found a proposal, select the closest one
+                if closest_proposal_id is not None:
+                    # Get the proposal's image type before adding it
+                    proposal_type = self.temporary_proposals[closest_proposal_id].get_image_type()
+                    # Get the proposal's function name
+                    proposal_function_name = self.temporary_proposals[closest_proposal_id].get_function_name()
+                    # Get the parent_id from the proposal
+                    parent_id = self.temporary_proposals[closest_proposal_id].get_parent_id()
+                    # Add the proposal as a new image
+                    new_img_id = self.add_image(self.temporary_proposals[closest_proposal_id].get_array(), 
+                                         parent_id=parent_id,  # Use the proposal's parent_id
+                                         pos=self.temporary_proposals[closest_proposal_id].get_pos(),
+                                         image_type=proposal_type)
+                    # Set the name of the new image to the function name
+                    if proposal_function_name:
+                        self.images[new_img_id].set_name(proposal_function_name)
+                    self.temporary_proposals.clear()
+                    # Start relaxation after adding a new image
+                    self.start_relaxation()
+                # Then check permanent images
+                else:
+                    image_clicked = False
+                    for img_id in self.images:
+                        if self.point_in_image(event.pos, img_id):
+                            # Store click information for potential drag or click
+                            self.click_start_time = pygame.time.get_ticks()
+                            self.click_start_pos = event.pos
+                            self.clicked_image_id = img_id
+                            # Calculate offset from mouse to image center for potential drag
+                            img_pos = self.images[img_id].get_pos()
+                            self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
+                            image_clicked = True
+                            break
+                        
+                        # If no image was clicked and we have proposals, clear them and start panning
+                        if not image_clicked and self.temporary_proposals:
+                            self.temporary_proposals.clear()
+                            self.start_relaxation()
+                            self.panning = True
+                            self.pan_start = event.pos
+                        # If no image was clicked and no proposals, just start panning
+                        elif not image_clicked:
+                            self.panning = True
+                            self.pan_start = event.pos
+            
+            elif event.button == 3:  # Right click
+                # Check if we clicked on an image
+                if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                    # If we clicked on an image, handle rotation
+                    self.dragging = True
+                    self.drag_start = event.pos
+                    self.initial_rotation = self.rotation
+                else:
+                    # If we didn't click on an image, handle panning
+                    self.panning = True
+                    self.pan_start = event.pos
+            
+            elif event.button == 2:  # Middle click
+                self.panning = True
+                self.pan_start = event.pos
+        
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:  # Left click
+                # Check if this was a click (short press) or a drag
+                if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                    current_time = pygame.time.get_ticks()
+                    time_diff = current_time - self.click_start_time
+                    
+                    # If it was a short press and the mouse hasn't moved much, treat as a click
+                    if time_diff < self.click_threshold and not self.dragging:
+                        # Process the image to show proposals
+                        self.process_image(self.clicked_image_id)
+                
+                # Reset all states
+                self.dragging = False
+                self.dragged_image_id = None
+                self.clicked_image_id = None
+                self.click_start_pos = None
+                self.panning = False
+                
+                # Start relaxation if we were dragging
+                if self.dragging:
+                    self.start_relaxation()
+            elif event.button == 3:  # Right click
+                self.dragging = False
+                self.panning = False
+            elif event.button == 2:  # Middle click
+                self.panning = False
+        
+        elif event.type == pygame.MOUSEMOTION:
+            # Update save button hover state
+            self.save_button_hovered = self.save_button_rect.collidepoint(event.pos)
+            
+            # Handle image dragging
+            for image in self.images.values():
+                if image.selected:
+                    image.move(event.pos)
+                    
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.temporary_proposals.clear()
+                
+        elif event.type == pygame.VIDEORESIZE:
+            self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+            # Update save button position
+            self.save_button_rect.bottom = event.h - 10
+
+    def save_image_tree(self):
+        """Save the current image tree structure to a YAML file."""
+        def build_tree_data(image_id):
+            """Recursively build the tree data structure for an image and its children."""
+            image = self.images[image_id]
+            pos = image.get_pos()
+            data = {
+                'id': image_id,
+                'name': image.get_name(),
+                'type': image.get_image_type(),
+                'x': pos[0],  # Save x coordinate separately
+                'y': pos[1],  # Save y coordinate separately
+                'filename': image.get_filename(),  # Add filename to the saved data
+                'children': []
+            }
+            
+            # Find all children of this image (only from permanent images)
+            for child_id in self.images:
+                child = self.images[child_id]
+                if child.get_parent_id() == image_id:
+                    data['children'].append(build_tree_data(child_id))
+                    
+            return data
+            
+        # Build the tree starting from the root (image with no parent)
+        root_id = None
+        for img_id, img in self.images.items():
+            if img.get_parent_id() is None:
+                root_id = img_id
+                break
+                
+        if root_id is not None:
+            tree_data = build_tree_data(root_id)
+            
+            # Create a timestamp for the filename
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"image_tree_{timestamp}.yaml"
+            
+            # Save to YAML file
+            with open(filename, 'w') as f:
+                yaml.dump(tree_data, f, default_flow_style=False)
+                
+    def load_image(self, filepath):
+        """Load an image from a file and add it to the canvas.
+        
+        Args:
+            filepath: Path to the image file to load
+        """
+        try:
+            # Load the image using matplotlib
+            img = mpimg.imread(filepath)
+            
+            # Convert to grayscale if it's RGB
+            if len(img.shape) == 3:
+                img = np.mean(img, axis=2)
+                
+            # Normalize to 0-1 range if needed
+            if img.max() > 1.0:
+                img = img / 255.0
+                
+            # Get just the filename without the path
+            filename = os.path.basename(filepath)
+            
+            # Add the image to the canvas
+            self.add_image(img, filename=filename)
+            
+        except Exception as e:
+            print(f"Error loading image: {e}")
+
 
 # Example image processing functions
 def create_dummy_functions():
@@ -1428,31 +1700,29 @@ def create_dummy_functions():
     
     # Functions for intensity images
     intensity_functions = {
-        'denoise': {
+        'filter': {
             'gaussian': lambda img: to_numpy(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2)),
             'median': lambda img: to_numpy(cle.median_box(to_cle(img), radius_x=1, radius_y=1)),
             'top_hat': lambda img: to_numpy(cle.top_hat_box(to_cle(img), radius_x=5, radius_y=5)),
             'bottom_hat': lambda img: to_numpy(cle.bottom_hat(to_cle(img), radius_x=5, radius_y=5)),
             'laplace': lambda img: to_numpy(cle.laplace(to_cle(img))),
-            'laplace_of_gaussian': lambda img: to_numpy(cle.laplace_of_gaussian(to_cle(img), sigma_x=2, sigma_y=2)),
-            'sobel': lambda img: to_numpy(cle.sobel(to_cle(img)))
-        },
-        'morphology': {
+            'laplace_of_gaussian': lambda img: to_numpy(cle.laplace(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2))),
+            'sobel': lambda img: to_numpy(cle.sobel(to_cle(img))),
             'minimum': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'mean': lambda img: to_numpy(cle.mean_box(to_cle(img), radius_x=2, radius_y=2)),
             'variance': lambda img: to_numpy(cle.variance_box(to_cle(img), radius_x=2, radius_y=2)),
             'mode': lambda img: to_numpy(cle.mode(to_cle(img), radius_x=2, radius_y=2))
         },
-        'threshold': {
+        'binarization': {
             'otsu': lambda img: intensity_to_binary(img, 'otsu'),
-            'mean': lambda img: intensity_to_binary(img, 'mean')
+            'mean': lambda img: intensity_to_binary(img, 'mean'),
+            'morphological_chan_vese': lambda img: to_numpy(cle.morphological_chan_vese(to_cle(img), num_iter=10)),
         },
         'segmentation': {
             'voronoi_otsu': lambda img: to_numpy(cle.voronoi_otsu_labeling(to_cle(img), spot_sigma=2, outline_sigma=2)),
-            'eroded_otsu': lambda img: to_numpy(cle.eroded_otsu_labeling(to_cle(img), erosion_radius=2)),
-            'gauss_otsu': lambda img: to_numpy(cle.gauss_otsu_labeling(to_cle(img), sigma_x=2, sigma_y=2)),
-            'morphological_chan_vese': lambda img: to_numpy(cle.morphological_chan_vese(to_cle(img), iterations=10)),
+            'eroded_otsu': lambda img: to_numpy(cle.eroded_otsu_labeling(to_cle(img), number_of_erosions=2, outline_sigma=2)),
+            'gauss_otsu': lambda img: to_numpy(cle.gauss_otsu_labeling(to_cle(img), outline_sigma=2)),
             'voronoi': lambda img: to_numpy(cle.voronoi_labeling(to_cle(img)))
         },
         'background': {
@@ -1463,7 +1733,7 @@ def create_dummy_functions():
     
     # Functions for binary images
     binary_functions = {
-        'morphology': {
+        'filter': {
             'dilate': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'erode': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'open': lambda img: to_numpy(cle.opening_box(to_cle(img), radius_x=2, radius_y=2)),
@@ -1478,19 +1748,17 @@ def create_dummy_functions():
     
     # Functions for labeled images
     label_functions = {
-        'morphology': {
+        'filter': {
             'erode_labels': lambda img: to_numpy(cle.erode_labels(to_cle(img), radius=2)),
             'dilate_labels': lambda img: to_numpy(cle.dilate_labels(to_cle(img), radius=2)),
             'smooth_labels': lambda img: to_numpy(cle.smooth_labels(to_cle(img), radius=2)),
-            'extend_via_voronoi': lambda img: to_numpy(cle.extend_labeling_via_voronoi(to_cle(img)))
+            'extend_via_voronoi': lambda img: to_numpy(cle.extend_labeling_via_voronoi(to_cle(img))),
+            'remove_small': lambda img: to_numpy(cle.remove_small_labels(to_cle(img), minimum_size=100)),
+            'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000))
         },
         'reduce': {
             'centroids': lambda img: to_numpy(cle.reduce_labels_to_centroids(to_cle(img))),
             'outlines': lambda img: to_numpy(cle.reduce_labels_to_label_edges(to_cle(img)))
-        },
-        'filter': {
-            'remove_small': lambda img: to_numpy(cle.remove_small_labels(to_cle(img), minimum_size=100)),
-            'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000))
         },
         'measure': {
             'mean_extension': lambda img: to_numpy(cle.mean_extension_map(to_cle(img))),
@@ -1526,7 +1794,7 @@ if __name__ == "__main__":
     canvas = ImageProcessingCanvas(800, 600, create_dummy_functions())
     
     # Add initial image with numpy array
-    canvas.add_image(img)
+    canvas.add_image(img, filename=image_path)
     
     # Run
     canvas.run()
