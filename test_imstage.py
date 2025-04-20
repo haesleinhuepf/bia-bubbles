@@ -549,6 +549,10 @@ class ImageProcessingCanvas:
         return 'intensity'  # Default
         
     def process_image(self, img_id):
+        # Don't process result images
+        if self.is_result_image(img_id):
+            return
+            
         # Clear old proposals
         self.temporary_proposals.clear()
         self.proposal_queue.clear()
@@ -746,6 +750,10 @@ class ImageProcessingCanvas:
                     else:
                         image_clicked = False
                         for img_id in self.images:
+                            # Skip result images
+                            if self.is_result_image(img_id):
+                                continue
+                                
                             if self.point_in_image(event.pos, img_id):
                                 # Store click information for potential drag or click
                                 self.click_start_time = pygame.time.get_ticks()
@@ -771,6 +779,10 @@ class ImageProcessingCanvas:
                 elif event.button == 3:  # Right click
                     # Check if we clicked on an image
                     if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                        # Skip result images
+                        if self.is_result_image(self.clicked_image_id):
+                            return True
+                            
                         # If we clicked on an image, handle rotation
                         self.dragging = True
                         self.drag_start = event.pos
@@ -787,6 +799,10 @@ class ImageProcessingCanvas:
                 if event.button == 1:  # Left click
                     # Check if this was a click (short press) or a drag
                     if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                        # Skip result images
+                        if self.is_result_image(self.clicked_image_id):
+                            return True
+                            
                         current_time = pygame.time.get_ticks()
                         time_diff = current_time - self.click_start_time
                         
@@ -816,6 +832,10 @@ class ImageProcessingCanvas:
                 if pygame.mouse.get_pressed()[0]:  # Left button
                     # Check if we should start dragging
                     if self.clicked_image_id is not None and not self.dragging:
+                        # Skip result images
+                        if self.is_result_image(self.clicked_image_id):
+                            return True
+                            
                         # Convert screen position to world position
                         world_pos = self.screen_to_world(event.pos)
                         
@@ -832,6 +852,10 @@ class ImageProcessingCanvas:
                     
                     # Handle dragging if active
                     if self.dragging and self.dragged_image_id is not None:
+                        # Skip result images
+                        if self.is_result_image(self.dragged_image_id):
+                            return True
+                            
                         # Handle dragging an image
                         world_pos = self.screen_to_world(event.pos)
                         # Calculate new position for the dragged image
@@ -854,6 +878,10 @@ class ImageProcessingCanvas:
                 # Check if right mouse button is pressed
                 elif pygame.mouse.get_pressed()[2]:  # Right button
                     if self.dragging:
+                        # Skip result images
+                        if self.clicked_image_id is not None and self.is_result_image(self.clicked_image_id):
+                            return True
+                            
                         # Handle rotation
                         dx = event.pos[0] - self.drag_start[0]
                         self.rotation = self.initial_rotation + dx * 0.01
@@ -1383,24 +1411,31 @@ class ImageProcessingCanvas:
             
         # Calculate forces and update positions for all images
         for img_id1, img1 in self.images.items():
+            # Skip result images
+            if self.is_result_image(img_id1):
+                continue
+                
             pos1 = img1.get_pos()
             force_x = 0
             force_y = 0
             
             # Calculate repulsive forces from other images
             for img_id2, img2 in self.images.items():
-                if img_id1 != img_id2:
-                    pos2 = img2.get_pos()
-                    dx = pos1[0] - pos2[0]
-                    dy = pos1[1] - pos2[1]
-                    distance = (dx*dx + dy*dy) ** 0.5
+                # Skip result images and self
+                if img_id1 == img_id2 or self.is_result_image(img_id2):
+                    continue
                     
-                    if distance < scaled_min_distance:
-                        # Calculate repulsive force with a stronger effect at closer distances
-                        force = (scaled_min_distance - distance) * self.relaxation_strength * (1 + 1/distance)
-                        if distance > 0:  # Avoid division by zero
-                            force_x += (dx / distance) * force
-                            force_y += (dy / distance) * force
+                pos2 = img2.get_pos()
+                dx = pos1[0] - pos2[0]
+                dy = pos1[1] - pos2[1]
+                distance = (dx*dx + dy*dy) ** 0.5
+                
+                if distance < scaled_min_distance:
+                    # Calculate repulsive force with a stronger effect at closer distances
+                    force = (scaled_min_distance - distance) * self.relaxation_strength * (1 + 1/distance)
+                    if distance > 0:  # Avoid division by zero
+                        force_x += (dx / distance) * force
+                        force_y += (dy / distance) * force
             
             # Add gentle force based on image depth
             depth = self.get_image_depth(img_id1)
@@ -1408,6 +1443,10 @@ class ImageProcessingCanvas:
                 # Calculate total rightward force from all other images
                 total_right_force = 0
                 for other_id, other_img in self.images.items():
+                    # Skip result images
+                    if self.is_result_image(other_id):
+                        continue
+                        
                     other_depth = self.get_image_depth(other_id)
                     if other_depth > 0:  # Only count processed images
                         total_right_force += 0.1 * other_depth
@@ -1459,32 +1498,35 @@ class ImageProcessingCanvas:
             # Update related images with delay and position preference
             related_ids = self.get_related_images(img_id1)
             for related_id in related_ids:
-                if related_id != img_id1:
-                    related_img = self.images[related_id]
+                # Skip result images and self
+                if related_id == img_id1 or self.is_result_image(related_id):
+                    continue
                     
-                    # Get current positions
-                    current_pos = related_img.get_pos()
-                    target_pos = img1.get_pos()
-                    
-                    # Calculate direction to target
-                    dx = target_pos[0] - current_pos[0]
-                    dy = target_pos[1] - current_pos[1]
-                    
-                    # Apply delayed following with position preference
-                    follow_delay = related_img.get_follow_delay()
-                    # Blend between current position and target position based on preferences
-                    new_x = current_pos[0] * self.related_position_preference + (current_pos[0] + dx * follow_delay) * (1 - self.related_position_preference)
-                    new_y = current_pos[1] * self.related_position_preference + (current_pos[1] + dy * follow_delay) * (1 - self.related_position_preference)
-                    
-                    # Keep within bounds
-                    new_x = max(50, min(self.width - 50, new_x))
-                    new_y = max(50, min(self.height - 50, new_y))
-                    
-                    # Update position
-                    related_img.set_pos((new_x, new_y))
-                    
-                    # Gradually increase follow delay (slowing down)
-                    related_img.set_follow_delay(follow_delay * 0.99)
+                related_img = self.images[related_id]
+                
+                # Get current positions
+                current_pos = related_img.get_pos()
+                target_pos = img1.get_pos()
+                
+                # Calculate direction to target
+                dx = target_pos[0] - current_pos[0]
+                dy = target_pos[1] - current_pos[1]
+                
+                # Apply delayed following with position preference
+                follow_delay = related_img.get_follow_delay()
+                # Blend between current position and target position based on preferences
+                new_x = current_pos[0] * self.related_position_preference + (current_pos[0] + dx * follow_delay) * (1 - self.related_position_preference)
+                new_y = current_pos[1] * self.related_position_preference + (current_pos[1] + dy * follow_delay) * (1 - self.related_position_preference)
+                
+                # Keep within bounds
+                new_x = max(50, min(self.width - 50, new_x))
+                new_y = max(50, min(self.height - 50, new_y))
+                
+                # Update position
+                related_img.set_pos((new_x, new_y))
+                
+                # Gradually increase follow delay (slowing down)
+                related_img.set_follow_delay(follow_delay * 0.99)
 
     def get_related_images(self, img_id, visited=None):
         """Find all images related to the given image ID (children and parents).
@@ -1535,6 +1577,10 @@ class ImageProcessingCanvas:
         Returns:
             bool: True if the move was successful
         """
+        # Don't move result images
+        if self.is_result_image(img_id):
+            return False
+            
         # Check if the image is at the border (with a small margin)
         border_margin = 10  # Pixels from the edge to consider as "border"
         
@@ -1561,36 +1607,39 @@ class ImageProcessingCanvas:
         
         # Check for collisions with other images
         for other_id, other_img in self.images.items():
-            if other_id != img_id:
-                other_pos = other_img.get_pos()
-                dx = new_pos[0] - other_pos[0]
-                dy = new_pos[1] - other_pos[1]
-                distance = (dx*dx + dy*dy) ** 0.5
+            # Skip result images and self
+            if other_id == img_id or self.is_result_image(other_id):
+                continue
                 
-                if distance < scaled_min_distance:
-                    # Calculate push direction and distance
-                    push_distance = scaled_min_distance - distance
-                    if distance > 0:  # Avoid division by zero
-                        push_x = (dx / distance) * push_distance
-                        push_y = (dy / distance) * push_distance
-                        
-                        # Push the other image away
-                        new_other_pos = (
-                            other_pos[0] - push_x,
-                            other_pos[1] - push_y
-                        )
-                        
-                        # Keep within bounds
-                        new_other_pos = (
-                            max(50, min(self.width - 50, new_other_pos[0])),
-                            max(50, min(self.height - 50, new_other_pos[1]))
-                        )
-                        
-                        # Update other image's position
-                        other_img.set_pos(new_other_pos)
-                        
-                        # Give the other image some velocity in the push direction
-                        other_img.set_velocity(-push_x * 0.1, -push_y * 0.1)
+            other_pos = other_img.get_pos()
+            dx = new_pos[0] - other_pos[0]
+            dy = new_pos[1] - other_pos[1]
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            if distance < scaled_min_distance:
+                # Calculate push direction and distance
+                push_distance = scaled_min_distance - distance
+                if distance > 0:  # Avoid division by zero
+                    push_x = (dx / distance) * push_distance
+                    push_y = (dy / distance) * push_distance
+                    
+                    # Push the other image away
+                    new_other_pos = (
+                        other_pos[0] - push_x,
+                        other_pos[1] - push_y
+                    )
+                    
+                    # Keep within bounds
+                    new_other_pos = (
+                        max(50, min(self.width - 50, new_other_pos[0])),
+                        max(50, min(self.height - 50, new_other_pos[1]))
+                    )
+                    
+                    # Update other image's position
+                    other_img.set_pos(new_other_pos)
+                    
+                    # Give the other image some velocity in the push direction
+                    other_img.set_velocity(-push_x * 0.1, -push_y * 0.1)
         
         # Move the dragged image to its new position
         self.images[img_id].set_pos(new_pos)
@@ -1727,6 +1776,10 @@ class ImageProcessingCanvas:
                 else:
                     image_clicked = False
                     for img_id in self.images:
+                        # Skip result images
+                        if self.is_result_image(img_id):
+                            continue
+                                
                         if self.point_in_image(event.pos, img_id):
                             # Store click information for potential drag or click
                             self.click_start_time = pygame.time.get_ticks()
@@ -1752,6 +1805,10 @@ class ImageProcessingCanvas:
             elif event.button == 3:  # Right click
                 # Check if we clicked on an image
                 if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                    # Skip result images
+                    if self.is_result_image(self.clicked_image_id):
+                        return True
+                        
                     # If we clicked on an image, handle rotation
                     self.dragging = True
                     self.drag_start = event.pos
@@ -1768,6 +1825,10 @@ class ImageProcessingCanvas:
             if event.button == 1:  # Left click
                 # Check if this was a click (short press) or a drag
                 if self.clicked_image_id is not None and self.clicked_image_id in self.images:
+                    # Skip result images
+                    if self.is_result_image(self.clicked_image_id):
+                        return True
+                        
                     current_time = pygame.time.get_ticks()
                     time_diff = current_time - self.click_start_time
                     
@@ -2016,11 +2077,81 @@ class ImageProcessingCanvas:
             # Load the tree starting from the root
             root_id = load_node(tree_data)
             
+            # Process the last image to result
+            self.process_last_image_to_result()
+            
             # Start relaxation to adjust positions
             self.start_relaxation()
             
         except Exception as e:
             print(f"Error loading YAML file: {e}")
+
+    def process_last_image_to_result(self):
+        """Process the last image in the canvas to create a result image.
+        This method will:
+        1. Keep the original image (ID 0)
+        2. Find the last image added to the canvas
+        3. Create a new image with the same pixels as the last image, but with a new name "result"
+        4. Delete all other images except the original and the new "result" image
+        """
+        # Find the last image ID (excluding ID 0)
+        last_image_id = None
+        for img_id in self.images:
+            if img_id != 0 and (last_image_id is None or img_id > last_image_id):
+                last_image_id = img_id
+                
+        if last_image_id is not None:
+            # Get the last image's data
+            last_image = self.images[last_image_id]
+            last_image_array = last_image.get_array()
+            last_image_pos = last_image.get_pos()
+            last_image_type = last_image.get_image_type()
+            
+            # Check if we already have a result image
+            result_id = None
+            for img_id, img in self.images.items():
+                if img.get_name() == "result":
+                    result_id = img_id
+                    break
+            
+            if result_id is None:
+                # Create a new result image if we don't have one
+                result_id = self.add_image(
+                    last_image_array,
+                    parent_id=None,  # No parent relationship
+                    pos=last_image_pos,
+                    image_type=last_image_type,
+                    name="result"
+                )
+            else:
+                # Update the existing result image
+                self.images[result_id].array = last_image_array
+                self.images[result_id].image_type = last_image_type
+                # Update the surface for display
+                if last_image_type == 'label':
+                    display_array = self.images[result_id]._label_to_rgb(last_image_array)
+                else:
+                    if last_image_array.max() <= 1.0:
+                        display_array = last_image_array * 255
+                    else:
+                        display_array = last_image_array
+                    if len(display_array.shape) == 2:
+                        display_array = np.stack([display_array] * 3, axis=-1)
+                display_array = display_array.astype(np.uint8)
+                self.images[result_id].surface = pygame.surfarray.make_surface(display_array)
+            
+            # Delete all images except original (ID 0) and the result
+            images_to_delete = []
+            for img_id in self.images:
+                if img_id != 0 and img_id != result_id:
+                    images_to_delete.append(img_id)
+                    
+            # Delete the images
+            for img_id in images_to_delete:
+                del self.images[img_id]
+                
+            # Start relaxation to adjust positions
+            self.start_relaxation()
 
     def render_level_buttons(self):
         """Render the level button and level selection buttons if visible."""
@@ -2070,6 +2201,19 @@ class ImageProcessingCanvas:
             
         return False
 
+    def is_result_image(self, img_id):
+        """Check if an image is a result image.
+        
+        Args:
+            img_id: ID of the image to check
+            
+        Returns:
+            bool: True if the image is a result image, False otherwise
+        """
+        if img_id in self.images:
+            return self.images[img_id].get_name() == "result"
+        return False
+
 
 # Example image processing functions
 def create_dummy_functions():
@@ -2086,19 +2230,7 @@ def create_dummy_functions():
     
     # Helper function to convert pyclesperanto array to numpy array
     def to_numpy(array):
-        return cle.pull(array)
-    
-    # Helper function to convert intensity to binary
-    def intensity_to_binary(img, method='otsu'):
-        if method == 'otsu':
-            return to_numpy(cle.threshold_otsu(to_cle(img)))
-        elif method == 'mean':
-            # pyclesperanto doesn't have threshold_mean, so we'll implement it ourselves
-            mean_val = np.mean(img)
-            return (img > mean_val) * 1
-        else:
-            return (img > np.mean(img)) * 1
-    
+        return cle.pull(array)  
    
     
     # Functions for intensity images
@@ -2107,26 +2239,15 @@ def create_dummy_functions():
             'gaussian': lambda img: to_numpy(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2)),
             'median': lambda img: to_numpy(cle.median_box(to_cle(img), radius_x=2, radius_y=2)),
             'top_hat': lambda img: to_numpy(cle.top_hat_box(to_cle(img), radius_x=5, radius_y=5)),
-            'bottom_hat': lambda img: to_numpy(cle.bottom_hat(to_cle(img), radius_x=5, radius_y=5)),
             'laplace': lambda img: to_numpy(cle.laplace(to_cle(img))),
-            'laplace_of_gaussian': lambda img: to_numpy(cle.laplace(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2))),
-            'sobel': lambda img: to_numpy(cle.sobel(to_cle(img))),
             'minimum': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'mean': lambda img: to_numpy(cle.mean_box(to_cle(img), radius_x=2, radius_y=2)),
             'variance': lambda img: to_numpy(cle.variance_box(to_cle(img), radius_x=2, radius_y=2)),
-            'mode': lambda img: to_numpy(cle.mode(to_cle(img), radius_x=2, radius_y=2))
         },
         'binarization': {
-            'otsu': lambda img: intensity_to_binary(img, 'otsu'),
-            'mean': lambda img: intensity_to_binary(img, 'mean'),
+            'otsu': lambda img: to_numpy(cle.threshold_otsu(to_cle(img))),
             'morphological_chan_vese': lambda img: to_numpy(cle.morphological_chan_vese(to_cle(img), num_iter=10)),
-        },
-        'segmentation': {
-            'voronoi_otsu': lambda img: to_numpy(cle.voronoi_otsu_labeling(to_cle(img), spot_sigma=2, outline_sigma=2)),
-            'eroded_otsu': lambda img: to_numpy(cle.eroded_otsu_labeling(to_cle(img), number_of_erosions=2, outline_sigma=2)),
-            'gauss_otsu': lambda img: to_numpy(cle.gauss_otsu_labeling(to_cle(img), outline_sigma=2)),
-            'voronoi': lambda img: to_numpy(cle.voronoi_labeling(to_cle(img)))
         },
         'background': {
             'subtract_gaussian': lambda img: to_numpy(cle.subtract_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)),
