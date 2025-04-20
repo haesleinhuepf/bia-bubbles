@@ -318,8 +318,7 @@ class ImageScatter:
     
     def screen_to_world(self, screen_pos):
         """Convert screen coordinates to world coordinates"""
-        # Subtract the view offset to get world coordinates
-        return (screen_pos[0] - self.view_offset_x, screen_pos[1] - self.view_offset_y)
+        return screen_pos
         
     def point_in_image(self, point, img_id, is_proposal=False):
         """Check if a point is within an image"""
@@ -331,18 +330,15 @@ class ImageScatter:
             surface = self.images[img_id].get_surface()
             pos = self.images[img_id].get_pos()
             
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        
         # Apply transformations
         transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        rect = transformed_surface.get_rect(center=pos)
         
         # For proposals, check if point is within a certain radius of the center
         if is_proposal:
             # Calculate distance from point to center
-            dx = point[0] - adjusted_pos[0]
-            dy = point[1] - adjusted_pos[1]
+            dx = point[0] - pos[0]
+            dy = point[1] - pos[1]
             distance = (dx*dx + dy*dy) ** 0.5
             
             # Use a radius based on the surface size
@@ -355,12 +351,9 @@ class ImageScatter:
             return distance <= radius
         else:
             # For regular images, use the rect collision
-            # Convert screen point to world coordinates by subtracting view offset
-            world_point = (point[0] - self.view_offset_x, point[1] - self.view_offset_y)
-            
-            # Calculate distance from world point to image center
-            dx = world_point[0] - pos[0]
-            dy = world_point[1] - pos[1]
+            # Calculate distance from point to image center
+            dx = point[0] - pos[0]
+            dy = point[1] - pos[1]
             distance = (dx*dx + dy*dy) ** 0.5
             
             # Use a radius based on the surface size
@@ -383,11 +376,8 @@ class ImageScatter:
         # Apply transformations to get the transformed surface
         transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
         
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        
-        # Get the rect of the transformed surface centered at the adjusted position
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        # Get the rect of the transformed surface centered at the position
+        rect = transformed_surface.get_rect(center=pos)
         
         # Get the center of the rect (which is the center of the image)
         image_center = rect.center
@@ -396,9 +386,6 @@ class ImageScatter:
         dx = point[0] - image_center[0]
         dy = point[1] - image_center[1]
         distance = (dx*dx + dy*dy) ** 0.5
-        
-        # Scale the distance by the current zoom level to maintain consistent visual distance
-        #distance = distance * self.scale
         
         return distance
 
@@ -468,10 +455,6 @@ class ImageProcessingCanvas:
         self.touch_points = []
         self.initial_touch_distance = 0
         self.initial_touch_angle = 0
-        
-        # Add view offset variables (needed for coordinate calculations)
-        self.view_offset_x = 0
-        self.view_offset_y = 0
         
         # Add relaxation variables
         self.relaxing = False
@@ -1175,16 +1158,10 @@ class ImageProcessingCanvas:
         # Extract just the name part after the "/"
         display_name = name.split('/')[-1] if '/' in name else name
         
-    
-    
         # For images, position text at the center with white outline
         # Position text at the center of the image
         text_x = pos[0]
         text_y = pos[1]
-        
-        # Apply view offset to text position
-        text_x += self.view_offset_x
-        text_y += self.view_offset_y
         
         # Split by "_" for multi-line display
         lines = display_name.split('_')
@@ -1221,8 +1198,7 @@ class ImageProcessingCanvas:
     
     def screen_to_world(self, screen_pos):
         """Convert screen coordinates to world coordinates"""
-        # Subtract the view offset to get world coordinates
-        return (screen_pos[0] - self.view_offset_x, screen_pos[1] - self.view_offset_y)
+        return screen_pos
         
     def point_in_image(self, point, img_id, is_proposal=False):
         """Check if a point is within an image"""
@@ -1234,18 +1210,15 @@ class ImageProcessingCanvas:
             surface = self.images[img_id].get_surface()
             pos = self.images[img_id].get_pos()
             
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        
         # Apply transformations
         transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        rect = transformed_surface.get_rect(center=pos)
         
         # For proposals, check if point is within a certain radius of the center
         if is_proposal:
             # Calculate distance from point to center
-            dx = point[0] - adjusted_pos[0]
-            dy = point[1] - adjusted_pos[1]
+            dx = point[0] - pos[0]
+            dy = point[1] - pos[1]
             distance = (dx*dx + dy*dy) ** 0.5
             
             # Use a radius based on the surface size
@@ -1258,12 +1231,9 @@ class ImageProcessingCanvas:
             return distance <= radius
         else:
             # For regular images, use the rect collision
-            # Convert screen point to world coordinates by subtracting view offset
-            world_point = (point[0] - self.view_offset_x, point[1] - self.view_offset_y)
-            
-            # Calculate distance from world point to image center
-            dx = world_point[0] - pos[0]
-            dy = world_point[1] - pos[1]
+            # Calculate distance from point to image center
+            dx = point[0] - pos[0]
+            dy = point[1] - pos[1]
             distance = (dx*dx + dy*dy) ** 0.5
             
             # Use a radius based on the surface size
@@ -1286,11 +1256,8 @@ class ImageProcessingCanvas:
         # Apply transformations to get the transformed surface
         transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
         
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        
-        # Get the rect of the transformed surface centered at the adjusted position
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        # Get the rect of the transformed surface centered at the position
+        rect = transformed_surface.get_rect(center=pos)
         
         # Get the center of the rect (which is the center of the image)
         image_center = rect.center
@@ -1299,9 +1266,6 @@ class ImageProcessingCanvas:
         dx = point[0] - image_center[0]
         dy = point[1] - image_center[1]
         distance = (dx*dx + dy*dy) ** 0.5
-        
-        # Scale the distance by the current zoom level to maintain consistent visual distance
-        #distance = distance * self.scale
         
         return distance
 
@@ -1315,10 +1279,6 @@ class ImageProcessingCanvas:
                 parent_pos = self.images[parent_id].get_pos()
                 child_pos = img.get_pos()
                 
-                # Apply view offset to positions
-                parent_pos = (parent_pos[0] + self.view_offset_x, parent_pos[1] + self.view_offset_y)
-                child_pos = (child_pos[0] + self.view_offset_x, child_pos[1] + self.view_offset_y)
-                
                 # Create a connection object
                 connection = Connection(self.images[parent_id], img)
                 connection.render(self.screen, self.scale)
@@ -1330,10 +1290,6 @@ class ImageProcessingCanvas:
                 # Get positions of both images
                 parent_pos = self.images[parent_id].get_pos()
                 child_pos = prop.get_pos()
-                
-                # Apply view offset to positions
-                parent_pos = (parent_pos[0] + self.view_offset_x, parent_pos[1] + self.view_offset_y)
-                child_pos = (child_pos[0] + self.view_offset_x, child_pos[1] + self.view_offset_y)
                 
                 # Create a connection object
                 connection = Connection(self.images[parent_id], prop)
@@ -1582,14 +1538,11 @@ class ImageProcessingCanvas:
         # Check if the image is at the border (with a small margin)
         border_margin = 10  # Pixels from the edge to consider as "border"
         
-        # Convert world coordinates to screen coordinates for border check
-        screen_pos = (new_pos[0] + self.view_offset_x, new_pos[1] + self.view_offset_y)
-        
         at_border = (
-            screen_pos[0] <= border_margin or 
-            screen_pos[0] >= self.width - border_margin or
-            screen_pos[1] <= border_margin or 
-            screen_pos[1] >= self.height - border_margin
+            new_pos[0] <= border_margin or 
+            new_pos[0] >= self.width - border_margin or
+            new_pos[1] <= border_margin or 
+            new_pos[1] >= self.height - border_margin
         )
         
         # If at border and not the original image, remove the image and its child nodes
@@ -1896,9 +1849,7 @@ class ImageProcessingCanvas:
             # Add view settings to the tree data
             tree_data['view_settings'] = {
                 'scale': self.scale,
-                'rotation': self.rotation,
-                'view_offset_x': self.view_offset_x,
-                'view_offset_y': self.view_offset_y
+                'rotation': self.rotation
             }
             
             # Create a timestamp for the filename
