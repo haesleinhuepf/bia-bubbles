@@ -10,6 +10,33 @@ import yaml
 import os
 import datetime
 
+class Connection:
+    """A class that represents a connection between two images."""
+    
+    def __init__(self, start_img, end_img):
+        """Initialize a connection between two images.
+        
+        Args:
+            start_img: The starting image
+            end_img: The ending image
+        """
+        self.start_img = start_img
+        self.end_img = end_img
+        
+    def render(self, surface, scale=1.0):
+        """Render the connection on the given surface.
+        
+        Args:
+            surface: The pygame surface to render on
+            scale: The scale factor to apply to the connection
+        """
+        # Get the positions of the two images
+        start_pos = self.start_img.get_pos()
+        end_pos = self.end_img.get_pos()
+        
+        # Draw a line between the two images
+        pygame.draw.line(surface, (255, 255, 255), start_pos, end_pos, max(1, int(2 * scale)))
+
 class ImageScatter:
     """A class that represents an image on the canvas with both numpy array and pygame surface representations."""
     
@@ -189,17 +216,18 @@ class ImageScatter:
         """Set the original filename of the image."""
         self.filename = filename
 
-    def render(self, surface):
+    def render(self, surface, scale=1.0):
         """Render this image on the given surface.
         
         Args:
             surface: The pygame surface to render on
+            scale: The scale factor to apply to the image
         """
         # Get the current position
         pos = self.get_pos()
         
         # Apply transformations
-        transformed_surface = pygame.transform.rotozoom(self.surface, 0, 1.0)  # No rotation or scale for now
+        transformed_surface = pygame.transform.rotozoom(self.surface, 0, scale)  # Use the provided scale
         
         # Create a circular mask
         mask_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
@@ -230,11 +258,11 @@ class ImageScatter:
         
         # Render name if provided
         if self.name:
-            self.render_name(surface, pos, radius)
+            self.render_name(surface, pos, radius, is_proposal=False, scale=scale)
         elif self.function_name:
-            self.render_name(surface, pos, radius, is_proposal=True)
+            self.render_name(surface, pos, radius, is_proposal=True, scale=scale)
 
-    def render_name(self, surface, pos, radius, is_proposal=False):
+    def render_name(self, surface, pos, radius, is_proposal=False, scale=1.0):
         """Render the name of this image.
         
         Args:
@@ -242,9 +270,12 @@ class ImageScatter:
             pos: Position of the image
             radius: Radius of the image circle
             is_proposal: Whether this is a proposal name (True) or an image name (False)
+            scale: The scale factor to apply to the font size
         """
-        # Create a font for the name
-        font = pygame.font.Font(None, 24)
+        # Create a font for the name with scaled size
+        base_font_size = 24
+        scaled_font_size = int(base_font_size * scale)
+        font = pygame.font.Font(None, scaled_font_size)
         
         # Get the name to display
         name = self.function_name if is_proposal else self.name
@@ -324,8 +355,18 @@ class ImageScatter:
             return distance <= radius
         else:
             # For regular images, use the rect collision
-            screen_point = (point[0] + self.view_offset_x, point[1] + self.view_offset_y)
-            return rect.collidepoint(screen_point)
+            # Convert screen point to world coordinates by subtracting view offset
+            world_point = (point[0] - self.view_offset_x, point[1] - self.view_offset_y)
+            
+            # Calculate distance from world point to image center
+            dx = world_point[0] - pos[0]
+            dy = world_point[1] - pos[1]
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            # Use a radius based on the surface size
+            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
+            
+            return distance <= radius
         
     def distance_to_image(self, point, img_id, is_proposal=False):
         """Calculate the distance from a point to the center of an image"""
@@ -1015,25 +1056,31 @@ class ImageProcessingCanvas:
         pygame.quit()
         
     def render(self):
-        """Render the current state of the canvas."""
+        """Render the canvas and all its elements."""
         # Clear the screen
-        self.screen.fill((0, 0, 0))
+        self.screen.fill((30, 30, 30))
         
-        # Render the title first
-        self.render_title(self.screen)
+        # Render the title if it exists
+        if self.title:
+            title_font = pygame.font.Font(None, 36)
+            title_text = title_font.render(self.title, True, (255, 255, 255))
+            title_rect = title_text.get_rect(center=(self.width // 2, 30))
+            self.screen.blit(title_text, title_rect)
         
-        # Render connections first (so they appear behind the images)
+        # Render connections
         self.render_connections()
         
-        # Render all images
-        for img in self.images.values():
-            img.render(self.screen)
-            
+        # Render images
+        for img_id, img in self.images.items():
+            img.render(self.screen, self.scale)
+            # No need to call render_name here as it's already called inside render
+        
         # Render temporary proposals
-        for img in self.temporary_proposals.values():
-            img.render(self.screen)
-            
-        # Render save button
+        for prop_id, prop in self.temporary_proposals.items():
+            prop.render(self.screen, self.scale)
+            # No need to call render_name here as it's already called inside render
+        
+        # Render the save button
         self.render_save_button()
         
         # Update the display
@@ -1120,7 +1167,7 @@ class ImageProcessingCanvas:
         elif image_name:
             self.render_name(pos, image_name, radius, is_proposal=False)
     
-    def render_name(self, pos, name, radius, is_proposal=False):
+    def render_name(self, pos, name, radius, is_proposal=False, scale=1.0):
         """Render a name (either function name for proposals or image name) with appropriate styling.
         
         Args:
@@ -1128,6 +1175,7 @@ class ImageProcessingCanvas:
             name: Name to render
             radius: Radius of the image circle
             is_proposal: Whether this is a proposal name (True) or an image name (False)
+            scale: The scale factor to apply to the font size
         """
         if name is None:
             return
@@ -1136,8 +1184,9 @@ class ImageProcessingCanvas:
         scaled_radius = radius * self.scale
         
         # Scale font size with the current scale
-        font_size = int(24 * self.scale)
-        font = pygame.font.Font(None, font_size)
+        base_font_size = 24
+        scaled_font_size = int(base_font_size * scale)
+        font = pygame.font.Font(None, scaled_font_size)
         
         # Extract just the name part after the "/"
         display_name = name.split('/')[-1] if '/' in name else name
@@ -1225,8 +1274,18 @@ class ImageProcessingCanvas:
             return distance <= radius
         else:
             # For regular images, use the rect collision
-            screen_point = (point[0] + self.view_offset_x, point[1] + self.view_offset_y)
-            return rect.collidepoint(screen_point)
+            # Convert screen point to world coordinates by subtracting view offset
+            world_point = (point[0] - self.view_offset_x, point[1] - self.view_offset_y)
+            
+            # Calculate distance from world point to image center
+            dx = world_point[0] - pos[0]
+            dy = world_point[1] - pos[1]
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            # Use a radius based on the surface size
+            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
+            
+            return distance <= radius
         
     def distance_to_image(self, point, img_id, is_proposal=False):
         """Calculate the distance from a point to the center of an image"""
@@ -1276,8 +1335,9 @@ class ImageProcessingCanvas:
                 parent_pos = (parent_pos[0] + self.view_offset_x, parent_pos[1] + self.view_offset_y)
                 child_pos = (child_pos[0] + self.view_offset_x, child_pos[1] + self.view_offset_y)
                 
-                # Draw a white line between the images
-                pygame.draw.line(self.screen, (255, 255, 255), parent_pos, child_pos, 2)
+                # Create a connection object
+                connection = Connection(self.images[parent_id], img)
+                connection.render(self.screen, self.scale)
         
         # Draw connections for temporary proposals
         for prop in self.temporary_proposals.values():
@@ -1291,8 +1351,9 @@ class ImageProcessingCanvas:
                 parent_pos = (parent_pos[0] + self.view_offset_x, parent_pos[1] + self.view_offset_y)
                 child_pos = (child_pos[0] + self.view_offset_x, child_pos[1] + self.view_offset_y)
                 
-                # Draw a white line between the images
-                pygame.draw.line(self.screen, (255, 255, 255), parent_pos, child_pos, 2)
+                # Create a connection object
+                connection = Connection(self.images[parent_id], prop)
+                connection.render(self.screen, self.scale)
 
     def start_relaxation(self):
         """Start the relaxation process for all images."""
@@ -1847,6 +1908,14 @@ class ImageProcessingCanvas:
         if root_id is not None:
             tree_data = build_tree_data(root_id)
             
+            # Add view settings to the tree data
+            tree_data['view_settings'] = {
+                'scale': self.scale,
+                'rotation': self.rotation,
+                'view_offset_x': self.view_offset_x,
+                'view_offset_y': self.view_offset_y
+            }
+            
             # Create a timestamp for the filename
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_tree_{timestamp}.yaml"
@@ -1906,6 +1975,13 @@ class ImageProcessingCanvas:
                 
             # Extract title if present
             self.title = tree_data.get('title', None)
+            
+            # Extract view settings if present
+            view_settings = tree_data.get('view_settings', {})
+            self.scale = view_settings.get('scale', 1.0)
+            self.rotation = view_settings.get('rotation', 0)
+            self.view_offset_x = view_settings.get('view_offset_x', 0)
+            self.view_offset_y = view_settings.get('view_offset_y', 0)
                 
             # Create a mapping of old IDs to new IDs
             id_mapping = {}
@@ -2045,7 +2121,7 @@ def create_dummy_functions():
     intensity_functions = {
         'filter': {
             'gaussian': lambda img: to_numpy(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2)),
-            'median': lambda img: to_numpy(cle.median_box(to_cle(img), radius_x=1, radius_y=1)),
+            'median': lambda img: to_numpy(cle.median_box(to_cle(img), radius_x=2, radius_y=2)),
             'top_hat': lambda img: to_numpy(cle.top_hat_box(to_cle(img), radius_x=5, radius_y=5)),
             'bottom_hat': lambda img: to_numpy(cle.bottom_hat(to_cle(img), radius_x=5, radius_y=5)),
             'laplace': lambda img: to_numpy(cle.laplace(to_cle(img))),
@@ -2122,8 +2198,8 @@ def create_dummy_functions():
 
 # Demo
 if __name__ == "__main__":
-    # Load the human_mitosis_small.png image
-    image_path = "human_mitosis_small.png"
+    # Load the image
+    image_path = "noise.png"
     # Load image using matplotlib (handles various image formats well)
     img = mpimg.imread(image_path)
     # Convert to grayscale if it's a color image
