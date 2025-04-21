@@ -407,6 +407,9 @@ class ImageProcessingCanvas:
         self.title = None
         self.title_font = pygame.font.Font(None, 36)  # Larger font for title
         
+        # Add current level tracking
+        self.current_level = 0
+        
         # Add save button properties
         self.save_button_rect = pygame.Rect(10, height - 40, 100, 30)
         self.save_button_color = (196, 196, 196) 
@@ -491,7 +494,7 @@ class ImageProcessingCanvas:
         if len(self.images) == 0:
             img_id = 0
         else:
-            img_id = np.max(list(self.images.keys())) + 1
+            img_id = int(np.max(list(self.images.keys()))) + 1
         if pos is None:
             pos = (self.width/2, self.height/2)
             
@@ -772,6 +775,8 @@ class ImageProcessingCanvas:
                                     result_type,
                                     proposal_type
                                 )
+                                # Check if we should load next level
+                                self.check_quality_and_load_next_level()
                             else:
                                 self.quality_metric = None
                         else:
@@ -1983,6 +1988,10 @@ class ImageProcessingCanvas:
             # Get just the filename without the path
             filename = os.path.basename(filepath)
             
+            # clear canvas
+            self.clear_canvas()
+            self.title = ""
+
             # Add the image to the canvas
             self.add_image(img, filename=filename)
             
@@ -2013,6 +2022,14 @@ class ImageProcessingCanvas:
                 
             # Extract title if present
             self.title = tree_data.get('title', None)
+            
+            # Extract level number from title if present
+            if self.title and "Level" in self.title:
+                try:
+                    level_str = self.title.split("Level")[1].split(":")[0].strip()
+                    self.current_level = int(level_str)
+                except (IndexError, ValueError):
+                    self.current_level = 0
             
             # Extract view settings if present
             view_settings = tree_data.get('view_settings', {})
@@ -2360,7 +2377,7 @@ class ImageProcessingCanvas:
             overlap = confusion_matrix(img1_array.ravel(), img2_array.ravel())
             
             # crop out region in confusion matrix where reference labels are
-            num_labels_reference = img1_array.max()
+            num_labels_reference = int(img1_array.max())
             overlap = overlap[0:num_labels_reference+1, :]
             
             # Measure correctly labeled pixels
@@ -2406,6 +2423,38 @@ class ImageProcessingCanvas:
                 # Draw text
                 text_rect = text_surface.get_rect(center=self.quality_metric_rect.center)
                 self.screen.blit(text_surface, text_rect)
+
+    def check_quality_and_load_next_level(self):
+        """Check if quality metrics meet thresholds and load next level if they do."""
+        if self.quality_metric is None:
+            return
+            
+        metric_name, metric_value = self.quality_metric
+        
+        # Check if metrics meet thresholds
+        if metric_name == "MSE:" and metric_value < 0.001:
+            self.load_next_level()
+            self.quality_metric = None
+        
+        elif metric_name == "IoU:" and metric_value > 0.999:
+            self.load_next_level()
+            self.quality_metric = None
+        
+            
+    def load_next_level(self):
+        """Load the next level if available."""
+        next_level = self.current_level + 1
+        level_file = f"level{next_level}.yaml"
+        
+        # Check if next level file exists
+        if os.path.exists(level_file):
+            try:
+                self.load_yaml_tree(level_file)
+                print(f"Loading next level: {next_level}")
+            except Exception as e:
+                print(f"Error loading next level {level_file}: {e}")
+        else:
+            print("Congratulations! You've completed all levels!")
 
 
 # Example image processing functions
