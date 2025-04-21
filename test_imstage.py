@@ -619,16 +619,17 @@ class ImageProcessingCanvas:
             
             # Determine initial distance based on number of proposals
             # More proposals need more space
-            base_distance = 150
+            factor = 2.2
             if total_functions > 5:
-                base_distance = 200
+                factor = 2.5
             if total_functions > 10:
-                base_distance = 250
+                factor = 3
             if total_functions > 15:
-                base_distance = 300
+                factor = 4
+            base_distance = self.images[img_id].get_radius(self.scale) * factor
                 
             # Scale the base distance by the current zoom level to maintain consistent visual distance
-            base_distance = base_distance * self.scale
+            #base_distance = base_distance * self.scale
                 
             # Keep track of the current function index across all categories
             current_function_index = 0
