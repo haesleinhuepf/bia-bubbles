@@ -483,7 +483,10 @@ class ImageProcessingCanvas:
             filename: Original filename of the image (if loaded from file)
             name: Display name of the image
         """
-        img_id = len(self.images)
+        if len(self.images) == 0:
+            img_id = 0
+        else:
+            img_id = np.max(list(self.images.keys())) + 1
         if pos is None:
             pos = (self.width/2, self.height/2)
             
@@ -990,9 +993,10 @@ class ImageProcessingCanvas:
         # Create a list of all items to update (both images and proposals)
         all_items = []
         
-        # Add permanent images
-        for img in self.images.values():
-            all_items.append(img)
+        # Add permanent images (excluding result image)
+        for img_id, img in self.images.items():
+            if not self.is_result_image(img_id):
+                all_items.append(img)
             
         # Add temporary proposals
         for prop in self.temporary_proposals.values():
@@ -1037,6 +1041,9 @@ class ImageProcessingCanvas:
                     
                     # Set new position
                     prop.set_pos((new_x, new_y))
+                    
+        # Move result image to bottom right corner after zooming
+        self.move_result_to_bottom_right()
 
     def run(self):
         """Main game loop"""
@@ -1362,7 +1369,7 @@ class ImageProcessingCanvas:
         return 999999
 
     def update_relaxation(self):
-        """Update positions of all images with momentum-based movement and delayed following."""
+        """Update positions of all images with momentum-based movement and delayed following."""        
         # Handle proposal animations
         current_time = pygame.time.get_ticks() / 1000.0  # Convert to seconds
         
@@ -2089,10 +2096,10 @@ class ImageProcessingCanvas:
     def process_last_image_to_result(self):
         """Process the last image in the canvas to create a result image.
         This method will:
-        1. Keep the original image (ID 0)
+        1. Keep all existing images
         2. Find the last image added to the canvas
         3. Create a new image with the same pixels as the last image, but with a new name "result"
-        4. Delete all other images except the original and the new "result" image
+        4. Update the result image if it already exists
         """
         # Find the last image ID (excluding ID 0)
         last_image_id = None
@@ -2123,6 +2130,7 @@ class ImageProcessingCanvas:
                     image_type=last_image_type,
                     name="result"
                 )
+                self.move_result_to_bottom_right()
             else:
                 # Update the existing result image
                 self.images[result_id].array = last_image_array
@@ -2139,19 +2147,66 @@ class ImageProcessingCanvas:
                         display_array = np.stack([display_array] * 3, axis=-1)
                 display_array = display_array.astype(np.uint8)
                 self.images[result_id].surface = pygame.surfarray.make_surface(display_array)
+                self.move_result_to_bottom_right()
+                
+            # Remove all derived images after processing to result
+            self.remove_derived_images()
             
-            # Delete all images except original (ID 0) and the result
-            images_to_delete = []
-            for img_id in self.images:
-                if img_id != 0 and img_id != result_id:
-                    images_to_delete.append(img_id)
-                    
-            # Delete the images
-            for img_id in images_to_delete:
+    def remove_derived_images(self):
+        """Remove all images derived from the original image (ID 0) except the result image."""
+        print("Removing derived images")
+        # Get all images that are derived from the original image
+        derived_images = []
+        for img_id, img in self.images.items():
+            # Skip the original image (ID 0) and the result image
+            if img_id == 0 or self.is_result_image(img_id):
+                continue
+                
+            # Check if this image is derived from the original image
+            if self.is_derived_from_original(img_id):
+                derived_images.append(img_id)
+                
+        # Remove all derived images
+        for img_id in derived_images:
+            if img_id in self.images:
                 del self.images[img_id]
                 
-            # Start relaxation to adjust positions
-            self.start_relaxation()
+        # Start relaxation to adjust remaining images
+        self.start_relaxation()
+        
+    def is_derived_from_original(self, img_id, visited=None):
+        """Check if an image is derived from the original image (ID 0).
+        
+        Args:
+            img_id: ID of the image to check
+            visited: Set of already visited image IDs to prevent infinite recursion
+            
+        Returns:
+            bool: True if the image is derived from the original image, False otherwise
+        """
+        # Initialize visited set if not provided
+        if visited is None:
+            visited = set()
+            
+        # If we've already visited this image, return False to prevent infinite recursion
+        if img_id in visited:
+            return False
+            
+        # Mark this image as visited
+        visited.add(img_id)
+        
+        # If this is the original image (ID 0), return True
+        if img_id == 0:
+            return True
+            
+        # Get the parent image
+        parent_id = self.images[img_id].get_parent_id()
+        if parent_id is not None and parent_id in self.images:
+            # Recursively check if the parent is derived from the original image
+            return self.is_derived_from_original(parent_id, visited)
+            
+        # If no parent found, return False
+        return False
 
     def render_level_buttons(self):
         """Render the level button and level selection buttons if visible."""
@@ -2212,6 +2267,29 @@ class ImageProcessingCanvas:
         """
         if img_id in self.images:
             return self.images[img_id].get_name() == "result"
+        return False
+
+    def move_result_to_bottom_right(self):
+        """Move the result image to the bottom right corner of the canvas."""
+        # Find the result image
+        result_id = None
+        for img_id, img in self.images.items():
+            if self.is_result_image(img_id):
+                result_id = img_id
+                break
+                
+        if result_id is not None:
+            # Calculate position in bottom right corner with margin
+            # Scale the margin with the current zoom level to maintain consistent visual distance
+            base_margin = 50  # Base margin in pixels
+            scaled_margin = base_margin * self.scale
+            
+            # Calculate position in bottom right corner
+            new_pos = (self.width - scaled_margin, self.height - scaled_margin)
+            
+            # Update the result image's position
+            self.images[result_id].set_pos(new_pos)
+            return True
         return False
 
 
