@@ -426,6 +426,11 @@ class ImageProcessingCanvas:
         self.level_button_height = 30
         self.level_button_spacing = 5
         
+        # Add quality metric properties
+        self.quality_metric = None
+        self.quality_metric_font = pygame.font.Font(None, 24)
+        self.quality_metric_rect = pygame.Rect(230, height - 40, 200, 30)  # Positioned next to level button
+        
         # Create level selection buttons (1-9)
         for i in range(9):
             button_rect = pygame.Rect(
@@ -683,6 +688,7 @@ class ImageProcessingCanvas:
                 # Update button positions
                 self.save_button_rect.bottom = self.height - 10
                 self.level_button_rect.bottom = self.height - 10
+                self.quality_metric_rect.bottom = self.height - 10
                 # Update level selection buttons
                 for i, button_rect in enumerate(self.level_buttons):
                     button_rect.x = self.level_button_rect.x
@@ -746,6 +752,31 @@ class ImageProcessingCanvas:
                         # Set the name of the new image to the function name
                         if proposal_function_name:
                             self.images[new_img_id].set_name(proposal_function_name)
+                            
+                        # Compute quality metric if there's a result image
+                        result_id = None
+                        for img_id, img in self.images.items():
+                            if self.is_result_image(img_id):
+                                result_id = img_id
+                                break
+                                
+                        if result_id is not None:
+                            result_img = self.images[result_id]
+                            result_type = result_img.get_image_type()
+                            
+                            # Only compute metric if types match
+                            if result_type == proposal_type:
+                                self.quality_metric = self.compute_quality_metric(
+                                    result_img.get_array(),
+                                    self.temporary_proposals[closest_proposal_id].get_array(),
+                                    result_type,
+                                    proposal_type
+                                )
+                            else:
+                                self.quality_metric = None
+                        else:
+                            self.quality_metric = None
+                            
                         self.temporary_proposals.clear()
                         # Start relaxation after adding a new image
                         self.start_relaxation()
@@ -1084,6 +1115,9 @@ class ImageProcessingCanvas:
         
         # Render the level buttons
         self.render_level_buttons()
+        
+        # Render quality metric
+        self.render_quality_metric()
         
         # Update the display
         pygame.display.flip()
@@ -2292,6 +2326,87 @@ class ImageProcessingCanvas:
             return True
         return False
 
+    def compute_quality_metric(self, img1_array, img2_array, img1_type, img2_type):
+        """Compute quality metric between two images.
+        
+        Args:
+            img1_array: First image array
+            img2_array: Second image array
+            img1_type: Type of first image ('intensity', 'binary', or 'label')
+            img2_type: Type of second image ('intensity', 'binary', or 'label')
+            
+        Returns:
+            tuple: (metric_name, metric_value) or (None, None) if types don't match
+        """
+        if img1_type != img2_type:
+            return None, None
+            
+        if img1_type == 'intensity':
+            # Compute MSE using clesperanto
+            import pyclesperanto as cle
+            img1_cle = cle.push(img1_array)
+            img2_cle = cle.push(img2_array)
+            mse = cle.mean_squared_error(img1_cle, img2_cle)
+            return "MSE:", mse
+        elif img1_type in ['binary', 'label']:
+            # Compute Jaccard index
+            from sklearn.metrics import confusion_matrix
+            import numpy as np
+            
+            img1_array = np.asarray(img1_array)
+            img2_array = np.asarray(img2_array)
+            
+            # determine overlap
+            overlap = confusion_matrix(img1_array.ravel(), img2_array.ravel())
+            
+            # crop out region in confusion matrix where reference labels are
+            num_labels_reference = img1_array.max()
+            overlap = overlap[0:num_labels_reference+1, :]
+            
+            # Measure correctly labeled pixels
+            n_pixels_pred = np.sum(overlap, axis=0, keepdims=True)
+            n_pixels_true = np.sum(overlap, axis=1, keepdims=True)
+            
+            # Calculate intersection over union
+            divisor = (n_pixels_pred + n_pixels_true - overlap)
+            is_zero = divisor == 0
+            divisor[is_zero] = 1
+            overlap[is_zero] = 0
+            iou = overlap / divisor
+            
+            # ignore background
+            iou = iou[1:,1:]
+            
+            max_jacc = iou.max(axis=1)
+            
+            quality = max_jacc.mean()
+            
+            return "IoU:", quality
+            
+        return None, None
+
+    def render_quality_metric(self):
+        """Render the quality metric on the screen."""
+        if self.quality_metric is not None:
+            metric_name, metric_value = self.quality_metric
+            if metric_name and metric_value is not None:
+                # Format the metric value
+                if metric_name == "MSE:":
+                    formatted_value = f"{metric_value:.6f}"
+                else:  # IoU
+                    formatted_value = f"{metric_value:.4f}"
+                    
+                # Create the text
+                text = f"{metric_name} {formatted_value}"
+                text_surface = self.quality_metric_font.render(text, True, (255, 255, 255))
+                
+                # Draw background
+                pygame.draw.rect(self.screen, (0, 0, 0, 128), self.quality_metric_rect)
+                
+                # Draw text
+                text_rect = text_surface.get_rect(center=self.quality_metric_rect.center)
+                self.screen.blit(text_surface, text_rect)
+
 
 # Example image processing functions
 def create_dummy_functions():
@@ -2381,22 +2496,11 @@ def create_dummy_functions():
 
 # Demo
 if __name__ == "__main__":
-    # Load the image
-    image_path = "noise.png"
-    # Load image using matplotlib (handles various image formats well)
-    img = mpimg.imread(image_path)
-    # Convert to grayscale if it's a color image
-    if len(img.shape) == 3:
-        img = np.mean(img, axis=2)
-    
-    # Ensure the image is in the correct format for pyclesperanto (float32)
-    img = img.astype(np.float32)
-    
     # Create canvas with our enhanced function collection
     canvas = ImageProcessingCanvas(800, 600, create_dummy_functions())
     
-    # Add initial image with numpy array
-    canvas.add_image(img, filename=image_path)
+    # Load level1.yaml instead of an image
+    canvas.load_yaml_tree("level1.yaml")
     
     # Run
     canvas.run()
