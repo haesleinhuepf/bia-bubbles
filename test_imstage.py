@@ -328,73 +328,87 @@ class ImageScatter:
         return screen_pos
         
     def point_in_image(self, point, img_id, is_proposal=False):
-        """Check if a point is within an image"""
+        """Check if a point is within an image's circular mask.
+        
+        Args:
+            point: The point to check
+            img_id: ID of the image to check
+            is_proposal: Whether this is a proposal image
+            
+        Returns:
+            bool: True if the point is within the image's circular mask
+        """
         # Get the appropriate surface and position based on whether it's a proposal or not
         if is_proposal:
-            surface = self.temporary_proposals[img_id].get_surface()
-            pos = self.temporary_proposals[img_id].get_pos()
+            img_obj = self.temporary_proposals[img_id]
         else:
-            surface = self.images[img_id].get_surface()
-            pos = self.images[img_id].get_pos()
+            img_obj = self.images[img_id]
             
-        # Apply transformations
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        rect = transformed_surface.get_rect(center=pos)
+        # Get the position
+        pos = img_obj.get_pos()
         
-        # For proposals, check if point is within a certain radius of the center
-        if is_proposal:
-            # Calculate distance from point to center
-            dx = point[0] - pos[0]
-            dy = point[1] - pos[1]
-            distance = (dx*dx + dy*dy) ** 0.5
-            
-            # Use a radius based on the surface size
-            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
-            
-            # If this is a proposal and it's animating, scale the radius
-            if is_proposal and self.temporary_proposals[img_id].is_animating:
-                radius *= self.temporary_proposals[img_id].animation_scale
-                
-            return distance <= radius
-        else:
-            # For regular images, use the rect collision
-            # Calculate distance from point to image center
-            dx = point[0] - pos[0]
-            dy = point[1] - pos[1]
-            distance = (dx*dx + dy*dy) ** 0.5
-            
-            # Use a radius based on the surface size
-            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
-            
-            return distance <= radius
+        # Calculate distance from point to center
+        dx = point[0] - pos[0]
+        dy = point[1] - pos[1]
+        distance = (dx*dx + dy*dy) ** 0.5
+        
+        # Get the radius of the image's circular mask
+        radius = img_obj.get_radius(self.scale)
+        
+        # Check if the point is within the radius
+        return distance <= radius
         
     def distance_to_image(self, point, img_id, is_proposal=False):
-        """Calculate the distance from a point to the center of an image"""
+        """Calculate the distance from a point to the edge of an image's circular mask.
+        
+        Args:
+            point: The point to check
+            img_id: ID of the image to check
+            is_proposal: Whether this is a proposal image
+            
+        Returns:
+            float: The distance from the point to the edge of the image's circular mask
+        """
         # Get the appropriate image object based on whether it's a proposal or not
         if is_proposal:
             img_obj = self.temporary_proposals[img_id]
         else:
             img_obj = self.images[img_id]
             
-        # Get the surface and position
-        surface = img_obj.get_surface()
+        # Get the position
         pos = img_obj.get_pos()
         
-        # Apply transformations to get the transformed surface
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        
-        # Get the rect of the transformed surface centered at the position
-        rect = transformed_surface.get_rect(center=pos)
-        
-        # Get the center of the rect (which is the center of the image)
-        image_center = rect.center
-        
-        # Calculate distance between point and image center
-        dx = point[0] - image_center[0]
-        dy = point[1] - image_center[1]
+        # Calculate distance from point to center
+        dx = point[0] - pos[0]
+        dy = point[1] - pos[1]
         distance = (dx*dx + dy*dy) ** 0.5
         
-        return distance
+        # Get the radius of the image's circular mask
+        radius = img_obj.get_radius(self.scale)
+        
+        # Return the distance to the edge of the circular mask
+        return max(0, distance - radius)
+
+    def get_radius(self, scale=1.0):
+        """Get the radius of this image's circular mask.
+        
+        Args:
+            scale: The scale factor to apply to the radius
+            
+        Returns:
+            float: The radius of the circular mask
+        """
+        # Get the base radius from the surface size
+        radius = min(self.surface.get_width(), self.surface.get_height()) * 0.4
+        
+        # Apply scale
+        radius *= scale
+        
+        # If this image is animating, scale the radius
+        if self.is_animating:
+            radius *= self.animation_scale
+            
+        return radius
 
 
 class ImageProcessingCanvas:
@@ -711,17 +725,30 @@ class ImageProcessingCanvas:
             
             # Handle window resize
             elif event.type == pygame.VIDEORESIZE:
+                # Calculate scale factors based on size change
+                width_scale = event.w / self.width
+                height_scale = event.h / self.height
+                # Use the smaller scale factor to ensure everything fits
+                scale_factor = min(width_scale, height_scale)
+                
+                # Update window size
                 self.width, self.height = event.size
                 self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+                
                 # Update button positions
                 self.save_button_rect.bottom = self.height - 10
                 self.level_button_rect.bottom = self.height - 10
                 self.solution_button_rect.bottom = self.height - 10
                 self.quality_metric_rect.bottom = self.height - 10
+                
                 # Update level selection buttons
                 for i, button_rect in enumerate(self.level_buttons):
                     button_rect.x = self.level_button_rect.x
                     button_rect.y = self.level_button_rect.y - (i + 1) * (self.level_button_height + self.level_button_spacing)
+                
+                # Scale the scene by applying zoom at the center of the window
+                center_point = (0,0)
+                self.zoom_at_point(center_point, scale_factor)
             
             # Handle drag and drop
             elif event.type == pygame.DROPFILE:
@@ -1319,73 +1346,66 @@ class ImageProcessingCanvas:
         return screen_pos
         
     def point_in_image(self, point, img_id, is_proposal=False):
-        """Check if a point is within an image"""
+        """Check if a point is within an image's circular mask.
+        
+        Args:
+            point: The point to check
+            img_id: ID of the image to check
+            is_proposal: Whether this is a proposal image
+            
+        Returns:
+            bool: True if the point is within the image's circular mask
+        """
         # Get the appropriate surface and position based on whether it's a proposal or not
         if is_proposal:
-            surface = self.temporary_proposals[img_id].get_surface()
-            pos = self.temporary_proposals[img_id].get_pos()
+            img_obj = self.temporary_proposals[img_id]
         else:
-            surface = self.images[img_id].get_surface()
-            pos = self.images[img_id].get_pos()
+            img_obj = self.images[img_id]
             
-        # Apply transformations
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        rect = transformed_surface.get_rect(center=pos)
+        # Get the position
+        pos = img_obj.get_pos()
         
-        # For proposals, check if point is within a certain radius of the center
-        if is_proposal:
-            # Calculate distance from point to center
-            dx = point[0] - pos[0]
-            dy = point[1] - pos[1]
-            distance = (dx*dx + dy*dy) ** 0.5
-            
-            # Use a radius based on the surface size
-            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
-            
-            # If this is a proposal and it's animating, scale the radius
-            if is_proposal and self.temporary_proposals[img_id].is_animating:
-                radius *= self.temporary_proposals[img_id].animation_scale
-                
-            return distance <= radius
-        else:
-            # For regular images, use the rect collision
-            # Calculate distance from point to image center
-            dx = point[0] - pos[0]
-            dy = point[1] - pos[1]
-            distance = (dx*dx + dy*dy) ** 0.5
-            
-            # Use a radius based on the surface size
-            radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
-            
-            return distance <= radius
+        # Calculate distance from point to center
+        dx = point[0] - pos[0]
+        dy = point[1] - pos[1]
+        distance = (dx*dx + dy*dy) ** 0.5
+        
+        # Get the radius of the image's circular mask
+        radius = img_obj.get_radius(self.scale)
+        
+        # Check if the point is within the radius
+        return distance <= radius
         
     def distance_to_image(self, point, img_id, is_proposal=False):
-        """Calculate the distance from a point to the center of an image"""
+        """Calculate the distance from a point to the edge of an image's circular mask.
+        
+        Args:
+            point: The point to check
+            img_id: ID of the image to check
+            is_proposal: Whether this is a proposal image
+            
+        Returns:
+            float: The distance from the point to the edge of the image's circular mask
+        """
         # Get the appropriate image object based on whether it's a proposal or not
         if is_proposal:
             img_obj = self.temporary_proposals[img_id]
         else:
             img_obj = self.images[img_id]
             
-        # Get the surface and position
-        surface = img_obj.get_surface()
+        # Get the position
         pos = img_obj.get_pos()
         
-        # Apply transformations to get the transformed surface
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
-        
-        # Get the rect of the transformed surface centered at the position
-        rect = transformed_surface.get_rect(center=pos)
-        
-        # Get the center of the rect (which is the center of the image)
-        image_center = rect.center
-        
-        # Calculate distance between point and image center
-        dx = point[0] - image_center[0]
-        dy = point[1] - image_center[1]
+        # Calculate distance from point to center
+        dx = point[0] - pos[0]
+        dy = point[1] - pos[1]
         distance = (dx*dx + dy*dy) ** 0.5
         
-        return distance
+        # Get the radius of the image's circular mask
+        radius = img_obj.get_radius(self.scale)
+        
+        # Return the distance to the edge of the circular mask
+        return max(0, distance - radius)
 
     def render_connections(self):
         """Draw white lines between related images"""
@@ -1526,6 +1546,8 @@ class ImageProcessingCanvas:
                 dx = pos1[0] - pos2[0]
                 dy = pos1[1] - pos2[1]
                 distance = (dx*dx + dy*dy) ** 0.5
+                if distance == 0:
+                    distance = 0.001
                 
                 if distance < scaled_min_distance:
                     # Calculate repulsive force with a stronger effect at closer distances
