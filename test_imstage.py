@@ -681,6 +681,8 @@ class ImageProcessingCanvas:
         # Connected components convert binary to label
         if input_type == 'binary' and function_name == 'connected_components':
             return 'label'
+        if input_type == 'binary' and function_name == 'distance_map':
+            return 'intensity'
             
         # Measurement functions convert label to intensity
         if input_type == 'label' and category == 'measure':
@@ -2596,6 +2598,11 @@ def create_dummy_functions():
 
         return watershed(outline_blurred, spots)
 
+    def distance_map(binary):
+        binary = np.asarray(binary, dtype=np.uint8)
+        dm = ndi.distance_transform_edt(binary)
+        dm = dm / dm.max() * 255
+        return dm.astype(np.uint8)  
 
     # Functions for intensity images
     intensity_functions = {
@@ -2634,7 +2641,7 @@ def create_dummy_functions():
             'binary_not': lambda img: to_numpy(cle.binary_not(to_cle(img))),
             'binary_edge': lambda img: to_numpy(cle.binary_edge_detection(to_cle(img))),
             'split_touching_objects': split_touching_objects,
-            'distance_map': lambda img: to_numpy(ndi.distance_transform_edt(to_numpy(img)))
+            'distance_map': distance_map
         },
         'label': {
             'connected_components': lambda img: to_numpy(cle.connected_component_labeling(to_cle(img))).astype(np.int32),

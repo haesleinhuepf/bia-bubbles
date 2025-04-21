@@ -1,0 +1,18 @@
+children:
+- children: []
+  filename: null
+  id: 1
+  name: label/watershed
+  type: label
+  x: 519.7484001149727
+  y: 259.6616116639085
+filename: membranes.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 1.139968255515455
+x: 345.4734715378323
+y: 262.8465139618986
+title: "Level 6: Cells and membranes"
