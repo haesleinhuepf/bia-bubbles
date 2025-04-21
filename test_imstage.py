@@ -429,10 +429,17 @@ class ImageProcessingCanvas:
         self.level_button_height = 30
         self.level_button_spacing = 5
         
+        # Add solution button properties
+        self.solution_button_rect = pygame.Rect(230, height - 40, 100, 30)  # Positioned next to level button
+        self.solution_button_color = (196, 196, 196)
+        self.solution_button_hover_color = (128, 128, 128)
+        self.solution_button_text = "Solution"
+        self.solution_button_hovered = False
+        
         # Add quality metric properties
         self.quality_metric = None
         self.quality_metric_font = pygame.font.Font(None, 24)
-        self.quality_metric_rect = pygame.Rect(230, height - 40, 200, 30)  # Positioned next to level button
+        self.quality_metric_rect = pygame.Rect(340, height - 40, 200, 30)  # Positioned next to solution button
         
         # Create level selection buttons (1-9)
         for i in range(9):
@@ -691,6 +698,7 @@ class ImageProcessingCanvas:
                 # Update button positions
                 self.save_button_rect.bottom = self.height - 10
                 self.level_button_rect.bottom = self.height - 10
+                self.solution_button_rect.bottom = self.height - 10
                 self.quality_metric_rect.bottom = self.height - 10
                 # Update level selection buttons
                 for i, button_rect in enumerate(self.level_buttons):
@@ -720,6 +728,9 @@ class ImageProcessingCanvas:
                 if event.button == 1:  # Left click
                     # Check if level button was clicked
                     if self.handle_level_button_click(event.pos):
+                        continue
+
+                    if self.handle_solution_button_click(event.pos):
                         continue
                         
                     # Check if save button was clicked
@@ -1120,6 +1131,9 @@ class ImageProcessingCanvas:
         
         # Render the level buttons
         self.render_level_buttons()
+        
+        # Render the solution button
+        self.render_solution_button()
         
         # Render quality metric
         self.render_quality_metric()
@@ -1904,6 +1918,8 @@ class ImageProcessingCanvas:
             self.save_button_hovered = self.save_button_rect.collidepoint(event.pos)
             # Update level button hover state
             self.level_button_hovered = self.level_button_rect.collidepoint(event.pos)
+            # Update solution button hover state
+            self.solution_button_hovered = self.solution_button_rect.collidepoint(event.pos)
             
             # Handle image dragging
             for image in self.images.values():
@@ -2006,7 +2022,7 @@ class ImageProcessingCanvas:
         self.is_animating_proposals = False
         self.start_relaxation()
 
-    def load_yaml_tree(self, filepath):
+    def load_yaml_tree(self, filepath, show_solution=False):
         """Load an image tree from a YAML file.
         
         Args:
@@ -2135,8 +2151,9 @@ class ImageProcessingCanvas:
             # Load the tree starting from the root
             root_id = load_node(tree_data)
             
-            # Process the last image to result
-            self.process_last_image_to_result()
+            if not show_solution:
+                # Process the last image to result
+                self.process_last_image_to_result()
             
             # Start relaxation to adjust positions
             self.start_relaxation()
@@ -2307,6 +2324,13 @@ class ImageProcessingCanvas:
             
         return False
 
+    def handle_solution_button_click(self, pos):
+        """Handle clicks on the solution button."""
+        # Check if solution button was clicked
+        if self.solution_button_rect.collidepoint(pos):
+            self.load_yaml_tree(f"level{self.current_level}.yaml", show_solution=True)
+            return True
+
     def is_result_image(self, img_id):
         """Check if an image is a result image.
         
@@ -2455,6 +2479,16 @@ class ImageProcessingCanvas:
                 print(f"Error loading next level {level_file}: {e}")
         else:
             print("Congratulations! You've completed all levels!")
+
+    def render_solution_button(self):
+        """Render the solution button on the screen."""
+        button_color = self.solution_button_hover_color if self.solution_button_hovered else self.solution_button_color
+        pygame.draw.rect(self.screen, button_color, self.solution_button_rect)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.solution_button_rect, 2)
+        
+        text_surface = self.save_button_font.render(self.solution_button_text, True, (0, 0, 0))
+        text_rect = text_surface.get_rect(center=self.solution_button_rect.center)
+        self.screen.blit(text_surface, text_rect)
 
 
 # Example image processing functions
