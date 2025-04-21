@@ -2550,17 +2550,8 @@ def create_dummy_functions():
     def split_touching_objects(binary, sigma: float = 3.5):
         """
         Takes a binary image and draws cuts in the objects similar to the ImageJ watershed algorithm [1].
-
-        This allows cutting connected objects such as not to dense nuclei. If the nuclei are too dense,
-        consider using stardist [2] or cellpose [3].
-
-        See also
-        --------
-        .. [1] https://imagej.nih.gov/ij/docs/menus/process.html#watershed
-        .. [2] https://www.napari-hub.org/plugins/stardist-napari
-        .. [3] https://www.napari-hub.org/plugins/cellpose-napari
         """
-        binary = np.asarray(binary)
+        binary = np.asarray(binary, dtype=np.uint8)
 
         # typical way of using scikit-image watershed
         distance = ndi.distance_transform_edt(binary)
@@ -2577,9 +2568,9 @@ def create_dummy_functions():
         edges2 = sobel(binary)
         
         almost = np.logical_not(np.logical_xor(edges != 0, edges2 != 0)) * binary
-        return sk_binary_opening(almost)
+        return sk_binary_opening(almost) * 1
     
-    def local_minima_seeded_watershed(image:"napari.types.ImageData", spot_sigma: float = 10, outline_sigma: float = 0) -> "napari.types.LabelsData":
+    def local_minima_seeded_watershed(image, spot_sigma: float = 10, outline_sigma: float = 0):
         """
         Segment cells in images with fluorescently marked membranes.
 
