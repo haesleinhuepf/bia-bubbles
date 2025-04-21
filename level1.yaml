@@ -12,7 +12,7 @@ name: original
 type: intensity
 view_settings:
   rotation: 0
-  scale: 2.5937424601000023
+  scale: 2.0
   view_offset_x: 0
   view_offset_y: 0
 x: 255.06017619716908

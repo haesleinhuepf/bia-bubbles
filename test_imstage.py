@@ -441,6 +441,12 @@ class ImageProcessingCanvas:
         self.quality_metric_font = pygame.font.Font(None, 24)
         self.quality_metric_rect = pygame.Rect(340, height - 40, 200, 30)  # Positioned next to solution button
         
+        # Add level completion properties
+        self.level_completed = False
+        self.level_completion_time = 0
+        self.level_completion_delay = 5000  # 5 seconds in milliseconds
+        self.correct_font = pygame.font.Font(None, 72)  # Large font for "Correct!" message
+        
         # Create level selection buttons (1-9)
         for i in range(9):
             button_rect = pygame.Rect(
@@ -1138,6 +1144,18 @@ class ImageProcessingCanvas:
         # Render quality metric
         self.render_quality_metric()
         
+        # Render "Correct!" message if level is completed
+        if self.level_completed:
+            # Create a semi-transparent overlay
+            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))  # Semi-transparent black
+            self.screen.blit(overlay, (0, 0))
+            
+            # Render "Correct!" text
+            correct_text = self.correct_font.render("Correct!", True, (0, 255, 0))  # Green text
+            correct_rect = correct_text.get_rect(center=(self.width // 2, self.height // 2))
+            self.screen.blit(correct_text, correct_rect)
+        
         # Update the display
         pygame.display.flip()
 
@@ -1436,6 +1454,17 @@ class ImageProcessingCanvas:
             proposal.animation_start_time = current_time
             self.temporary_proposals[proposal_id] = proposal
         
+        # Update animation scale for all proposals
+        for proposal in self.temporary_proposals.values():
+            if proposal.is_animating:
+                elapsed_time = current_time - proposal.animation_start_time
+                # Calculate scale based on elapsed time (0 to 1 over animation_duration)
+                proposal.animation_scale = min(1.0, elapsed_time / proposal.animation_duration)
+                # If animation is complete, stop animating
+                if proposal.animation_scale >= 1.0:
+                    proposal.is_animating = False
+                    proposal.animation_scale = 1.0
+        
         # Check if we should add the next proposal
         if self.is_animating_proposals and self.proposal_queue and current_time - self.last_proposal_time >= self.proposal_delay:
             # Add the next proposal to temporary_proposals
@@ -1450,17 +1479,13 @@ class ImageProcessingCanvas:
             if not self.proposal_queue:
                 self.is_animating_proposals = False
         
-        # Update animation states for all proposals
-        for proposal in self.temporary_proposals.values():
-            if proposal.is_animating:
-                elapsed = current_time - proposal.animation_start_time
-                if elapsed >= proposal.animation_duration:
-                    proposal.is_animating = False
-                    proposal.animation_scale = 1.0
-                else:
-                    # Use a smooth easing function for the animation
-                    t = elapsed / proposal.animation_duration
-                    proposal.animation_scale = t * t * (3 - 2 * t)  # Smooth step interpolation
+        # Check if level is completed and it's time to load the next level
+        if self.level_completed:
+            current_ticks = pygame.time.get_ticks()
+            if current_ticks - self.level_completion_time >= self.level_completion_delay:
+                self.level_completed = False
+                self.load_next_level()
+                return
         
         # Only relax if we're not showing proposals
         if self.temporary_proposals:
@@ -2457,11 +2482,13 @@ class ImageProcessingCanvas:
         
         # Check if metrics meet thresholds
         if metric_name == "MSE:" and metric_value < 0.001:
-            self.load_next_level()
+            self.level_completed = True
+            self.level_completion_time = pygame.time.get_ticks()
             self.quality_metric = None
         
         elif metric_name == "IoU:" and metric_value > 0.999:
-            self.load_next_level()
+            self.level_completed = True
+            self.level_completion_time = pygame.time.get_ticks()
             self.quality_metric = None
         
             
