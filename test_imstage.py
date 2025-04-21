@@ -468,8 +468,14 @@ class ImageProcessingCanvas:
         self.level_completion_delay = 5000  # 5 seconds in milliseconds
         self.correct_font = pygame.font.Font(None, 72)  # Large font for "Correct!" message
         
-        # Create level selection buttons (1-9)
-        for i in range(9):
+        # Find max level number by checking for level{n}.yaml files
+        max_level = 1
+        while os.path.exists(f"level{max_level}.yaml"):
+            max_level += 1
+        max_level -= 1  # Adjust since we went one too far
+        
+        # Create level selection buttons (1 to max_level)
+        for i in range(max_level):
             button_rect = pygame.Rect(
                 self.level_button_rect.x,
                 self.level_button_rect.y - (i + 1) * (self.level_button_height + self.level_button_spacing),
@@ -2117,11 +2123,19 @@ class ImageProcessingCanvas:
             # Create a mapping of old IDs to new IDs
             id_mapping = {}
             
+            # Calculate scaling factors based on original (800x600) and current screen size
+            scale_x = self.width / 800.0
+            scale_y = self.height / 600.0
+            
             def load_node(node_data, parent_id=None):
                 """Recursively load a node and its children."""
                 # Get the image type and name
                 image_type = node_data.get('type', 'intensity')
                 name = node_data.get('name', None)
+                
+                # Scale the position based on current screen size
+                x = node_data.get('x', 0) * scale_x
+                y = node_data.get('y', 0) * scale_y
                 
                 # If this is a processed image (has a name with category/function format)
                 if name and '/' in name:
@@ -2143,7 +2157,7 @@ class ImageProcessingCanvas:
                                 new_id = self.add_image(
                                     result_array,
                                     parent_id=parent_id,
-                                    pos=(node_data['x'], node_data['y']),
+                                    pos=(x, y),
                                     image_type=image_type,  # Use the type specified in the YAML file
                                     name=name
                                 )
@@ -2185,7 +2199,7 @@ class ImageProcessingCanvas:
                     new_id = self.add_image(
                         img,
                         parent_id=parent_id,
-                        pos=(node_data['x'], node_data['y']),
+                        pos=(x, y),
                         image_type=image_type,
                         filename=node_data['filename']
                     )
