@@ -9,6 +9,13 @@ import pyclesperanto as cle
 import yaml
 import os
 import datetime
+from scipy import ndimage as ndi
+from skimage.morphology import binary_opening as sk_binary_opening
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
+from skimage.filters import gaussian, sobel
+from skimage.morphology import label
+from skimage.morphology import local_minima
 
 class Connection:
     """A class that represents a connection between two images."""
@@ -667,7 +674,10 @@ class ImageProcessingCanvas:
         # Threshold functions convert intensity to binary
         if input_type == 'intensity' and category == 'binarization':
             return 'binary'
-            
+        if input_type == 'intensity' and category == 'label':
+            return 'label'
+
+
         # Connected components convert binary to label
         if input_type == 'binary' and function_name == 'connected_components':
             return 'label'
@@ -2524,6 +2534,8 @@ def create_dummy_functions():
     Create a collection of image processing functions organized by the type of image they can be applied to.
     Uses pyclesperanto for GPU-accelerated image processing.
     """
+    
+
     # Initialize pyclesperanto
     cle.select_device('gpu')
     
@@ -2535,7 +2547,65 @@ def create_dummy_functions():
     def to_numpy(array):
         return cle.pull(array)  
    
+    def split_touching_objects(binary, sigma: float = 3.5):
+        """
+        Takes a binary image and draws cuts in the objects similar to the ImageJ watershed algorithm [1].
+
+        This allows cutting connected objects such as not to dense nuclei. If the nuclei are too dense,
+        consider using stardist [2] or cellpose [3].
+
+        See also
+        --------
+        .. [1] https://imagej.nih.gov/ij/docs/menus/process.html#watershed
+        .. [2] https://www.napari-hub.org/plugins/stardist-napari
+        .. [3] https://www.napari-hub.org/plugins/cellpose-napari
+        """
+        binary = np.asarray(binary)
+
+        # typical way of using scikit-image watershed
+        distance = ndi.distance_transform_edt(binary)
+        blurred_distance = gaussian(distance, sigma=sigma)
+        fp = np.ones((3,) * binary.ndim)
+        coords = peak_local_max(blurred_distance, footprint=fp, labels=binary)
+        mask = np.zeros(distance.shape, dtype=bool)
+        mask[tuple(coords.T)] = True
+        markers = label(mask)
+        labels = watershed(-blurred_distance, markers, mask=binary)
+
+        # identify label-cutting edges
+        edges = sobel(labels)
+        edges2 = sobel(binary)
+        
+        almost = np.logical_not(np.logical_xor(edges != 0, edges2 != 0)) * binary
+        return sk_binary_opening(almost)
     
+    def local_minima_seeded_watershed(image:"napari.types.ImageData", spot_sigma: float = 10, outline_sigma: float = 0) -> "napari.types.LabelsData":
+        """
+        Segment cells in images with fluorescently marked membranes.
+
+        The two sigma parameters allow tuning the segmentation result. The first sigma controls how close detected cells
+        can be (spot_sigma) and the second controls how precise segmented objects are outlined (outline_sigma). Under the
+        hood, this filter applies two Gaussian blurs, local minima detection and a seeded watershed.
+
+        See also
+        --------
+        .. [1] https://scikit-image.org/docs/dev/auto_examples/segmentation/plot_watershed.html
+        """
+
+        image = np.asarray(image)
+
+        spot_blurred = gaussian(image, sigma=spot_sigma)
+
+        spots = label(local_minima(spot_blurred))
+
+        if outline_sigma == spot_sigma:
+            outline_blurred = spot_blurred
+        else:
+            outline_blurred = gaussian(image, sigma=outline_sigma)
+
+        return watershed(outline_blurred, spots)
+
+
     # Functions for intensity images
     intensity_functions = {
         'filter': {
@@ -2547,10 +2617,15 @@ def create_dummy_functions():
             'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'mean': lambda img: to_numpy(cle.mean_box(to_cle(img), radius_x=2, radius_y=2)),
             'variance': lambda img: to_numpy(cle.variance_box(to_cle(img), radius_x=2, radius_y=2)),
+            'invert': lambda img: to_numpy(np.max(img) - img)
         },
         'binarization': {
             'otsu': lambda img: to_numpy(cle.threshold_otsu(to_cle(img))),
             'morphological_chan_vese': lambda img: to_numpy(cle.morphological_chan_vese(to_cle(img), num_iter=10)),
+        },
+        'label': {
+            'watershed': local_minima_seeded_watershed,
+            'voronoi-otsu': lambda img: to_numpy(cle.voronoi_otsu_labeling(to_cle(img), spot_sigma=2, outline_sigma=2))
         },
         'background': {
             'subtract_gaussian': lambda img: to_numpy(cle.subtract_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)),
@@ -2566,7 +2641,9 @@ def create_dummy_functions():
             'open': lambda img: to_numpy(cle.opening_box(to_cle(img), radius_x=2, radius_y=2)),
             'close': lambda img: to_numpy(cle.closing_box(to_cle(img), radius_x=2, radius_y=2)),
             'binary_not': lambda img: to_numpy(cle.binary_not(to_cle(img))),
-            'binary_edge': lambda img: to_numpy(cle.binary_edge_detection(to_cle(img)))
+            'binary_edge': lambda img: to_numpy(cle.binary_edge_detection(to_cle(img))),
+            'split_touching_objects': split_touching_objects,
+            'distance_map': lambda img: to_numpy(ndi.distance_transform_edt(to_numpy(img)))
         },
         'label': {
             'connected_components': lambda img: to_numpy(cle.connected_component_labeling(to_cle(img))).astype(np.int32),
