@@ -1,0 +1,8 @@
+dist/*
+build/*
+.ipynb_checkpoints
+Untitled*
+.idea
+*__pycache__*
+*egg-info*
+deploy.bat

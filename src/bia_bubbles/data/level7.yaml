@@ -32,4 +32,6 @@ function_filters:
 - voronoi_otsu
 - connected_components
 - variance
+- subtract_gaussian
+- divide_by_gaussian
 

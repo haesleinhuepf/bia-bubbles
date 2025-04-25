@@ -1,34 +1,25 @@
 children:
-- children:
-  - children: []
-    filename: null
-    id: 2
-    name: label/connected_components
-    type: label
-    x: 553.8557606505143
-    y: 263.2531310142915
+- children: []
   filename: null
   id: 1
-  name: binarization/otsu
-  type: binary
-  x: 405.8146701890833
-  y: 241.63167689242277
-filename: human_mitosis_small.png
+  name: filter/transpose_xy
+  type: intensity
+  x: 622.0606608732473
+  y: 482.7138285230496
+filename: blobs.tif
 id: 0
 name: original
 type: intensity
 view_settings:
   rotation: 0
-  scale: 1.4641000000000006
-  view_offset_x: 0
-  view_offset_y: 0
-x: 238.73431712524092
-y: 252.5576351653638
-title: "Level 3: Label nuclei"
+  scale: 1.2
+x: 300.1254057454881
+y: 256.7721276159198
+title: "Level 3: Spatial transformations"
 function_filters:
-- voronoi-otsu
-- otsu
-- morphological_chan_vese
-- connected_components
-- erode
-- dilate
+- transpose_xy
+- rotate_clockwise
+- rotate_counterclockwise
+- flip_x
+- flip_y
+

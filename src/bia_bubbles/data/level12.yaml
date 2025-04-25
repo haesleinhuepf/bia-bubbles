@@ -1,0 +1,42 @@
+children:
+- children:
+  - children:
+    - children: []
+      filename: null
+      id: 9
+      name: measure/pixel_count
+      type: intensity
+      x: 740.8108553022618
+      y: 466.1482623218059
+    filename: null
+    id: 8
+    name: label/connected_components
+    type: label
+    x: 794.1309381108962
+    y: 240.4594716706233
+  filename: null
+  id: 7
+  name: binarization/otsu
+  type: binary
+  x: 567.4188404602688
+  y: 291.126892711869
+filename: blobs.tif
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 1.0943023107606549
+x: 355.93046493359157
+y: 383.9372624196494
+title: "Level 12: Measurements"
+function_filters:
+- voronoi-otsu
+- otsu
+- gaussian
+- erode
+- dilate
+- connected_components
+- mean_extension
+- pixel_count
+- extension_ratio

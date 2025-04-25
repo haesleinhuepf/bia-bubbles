@@ -2593,10 +2593,6 @@ class ImageProcessingCanvas:
         self.screen.blit(text_surface, text_rect)
 
 
-def divide_by_gaussian(img, sigma_x, sigma_y):
-    result = cle.divide_by_gaussian_background(img, sigma_x=10, sigma_y=10)
-    return result * 255 / result.max()
-
 def scale_to_uint8(img):
     return img * 255 / img.max()
 
@@ -2680,13 +2676,21 @@ def create_functions():
         'filter': {
             'gaussian': lambda img: to_numpy(cle.gaussian_blur(to_cle(img), sigma_x=2, sigma_y=2)),
             'median': lambda img: to_numpy(cle.median_box(to_cle(img), radius_x=2, radius_y=2)),
-            'top_hat': lambda img: to_numpy(cle.top_hat_box(to_cle(img), radius_x=5, radius_y=5)),
             'laplace': lambda img: to_numpy(cle.laplace(to_cle(img))),
             'minimum': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'mean': lambda img: to_numpy(cle.mean_box(to_cle(img), radius_x=2, radius_y=2)),
             'variance': lambda img: to_numpy(scale_to_uint8(cle.variance_box(to_cle(img), radius_x=2, radius_y=2))),
-            'invert': lambda img: to_numpy(np.max(img) - img)
+            'invert': lambda img: to_numpy(np.max(img) - img),
+            'transpose_xy': lambda img: to_numpy(cle.transpose_xy(to_cle(img))),
+            'rotate_clockwise': lambda img: to_numpy(cle.rotate(to_cle(img), angle_z=90)),
+            'rotate_counterclockwise': lambda img: to_numpy(cle.rotate(to_cle(img), angle_z=-90)),
+            'flip_x': lambda img: to_numpy(cle.flip(to_cle(img), flip_x=True)),
+            'flip_y': lambda img: to_numpy(cle.flip(to_cle(img), flip_y=True)),
+            'top_hat': lambda img: to_numpy(cle.top_hat_box(to_cle(img), radius_x=5, radius_y=5)),
+            'subtract_gaussian': lambda img: to_numpy(cle.subtract_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)),
+            'divide_by_gaussian': lambda img: to_numpy(scale_to_uint8(cle.divide_by_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10))),
+            'clahe': lambda img: to_numpy(cle.clahe(to_cle(img), clip_limit=0.01))
         },
         'binarization': {
             'otsu': lambda img: to_numpy(cle.threshold_otsu(to_cle(img))),
@@ -2695,12 +2699,8 @@ def create_functions():
         },
         'label': {
             'watershed': local_minima_seeded_watershed,
-            'voronoi-otsu': lambda img: to_numpy(cle.voronoi_otsu_labeling(to_cle(img), spot_sigma=2, outline_sigma=2))
+            'voronoi-otsu': lambda img: to_numpy(cle.voronoi_otsu_labeling(to_cle(img), spot_sigma=3.5, outline_sigma=1))
         },
-        'background': {
-            'subtract_gaussian': lambda img: to_numpy(cle.subtract_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)),
-            'divide_by_gaussian': lambda img: to_numpy(scale_to_uint8(cle.divide_by_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)))
-        }
     }
     
     # Functions for binary images
@@ -2732,7 +2732,7 @@ def create_functions():
             'extend_via_voronoi': lambda img: to_numpy(cle.extend_labeling_via_voronoi(to_cle(img))),
             'remove_small': lambda img: to_numpy(cle.remove_small_labels(to_cle(img), minimum_size=100)),
             'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000)),
-            'mode': lambda img: to_numpy(cle.mode_box(to_cle(img), radius_x=2, radius_y=2))
+            'mode': lambda img: to_numpy(cle.mode_box(to_cle(img), radius_x=2, radius_y=2)),
         },
         'reduce': {
             'centroids': lambda img: to_numpy(cle.reduce_labels_to_centroids(to_cle(img))),
@@ -2768,8 +2768,6 @@ def filter_functions(categories, valid_names):
         for name, function in functions.items():
             if name in valid_names or name.replace('_', '-') in valid_names or name.replace('-', '_') in valid_names:
                 filtered_functions[name] = function
-            else:
-                print("ignoring", name)
         if len(filtered_functions) > 0:
             filtered_categories[c_name] = filtered_functions
         
