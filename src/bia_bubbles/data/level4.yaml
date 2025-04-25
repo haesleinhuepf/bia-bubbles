@@ -1,0 +1,41 @@
+children:
+- children:
+  - children:
+    - children: []
+      filename: null
+      id: 6
+      name: reduce/outlines
+      type: label
+      x: 464.73914595961946
+      y: 415.06126860893903
+    filename: null
+    id: 5
+    name: label/connected_components
+    type: label
+    x: 554.164975561163
+    y: 240.04162813090568
+  filename: null
+  id: 4
+  name: binarization/otsu
+  type: binary
+  x: 278.0356109238435
+  y: 488.83265162137195
+filename: human_mitosis_small.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 1.3176900000000007
+x: 222.70893616262748
+y: 301.19097040168043
+title: "Level 4: Label nuclear envelope"
+function_filters:
+- voronoi-otsu
+- otsu
+- morphological_chan_vese
+- connected_components
+- outlines
+- erode
+- dilate
+- binary_edge

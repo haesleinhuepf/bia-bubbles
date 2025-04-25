@@ -1,0 +1,27 @@
+children:
+- children: []
+  filename: null
+  id: 1
+  name: filter/median
+  type: intensity
+  x: 593.9053349125147
+  y: 312.60826988628435
+filename: noise.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 2.0
+  view_offset_x: 0
+  view_offset_y: 0
+x: 255.06017619716908
+y: 310.7365831289068
+title: "Level 1: Denoising"
+function_filters:
+- median
+- gaussian
+- mean
+- minimum
+- maximum
+- top_hat

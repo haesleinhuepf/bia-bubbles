@@ -1,0 +1,55 @@
+children:
+- children:
+  - children:
+    - children:
+      - children: []
+        filename: null
+        id: 4
+        name: filter/extend_via_voronoi
+        type: label
+        x: 570.9693153884922
+        y: 396.6780359974251
+      filename: null
+      id: 3
+      name: label/connected_components
+      type: label
+      x: 592.2150396530393
+      y: 281.8610963355846
+    filename: null
+    id: 2
+    name: binarization/otsu
+    type: binary
+    x: 482.48255847986616
+    y: 320.82782391195406
+  filename: null
+  id: 1
+  name: filter/gaussian
+  type: intensity
+  x: 367.298820615979
+  y: 317.7063203122432
+filename: human_mitosis_small.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 0.7748409780000003
+x: 253.1846538622943
+y: 341.7415204716149
+title: "Level 0: BIA-bubbles Demo"
+function_filters:
+- voronoi-otsu
+- otsu
+- morphological_chan_vese
+- connected_components
+- erode
+- dilate
+- gaussian
+- median
+- mean
+- top-hat
+- morphological_chan_vese
+- erode_labels
+- dilate_labels
+- extend_via_voronoi
+

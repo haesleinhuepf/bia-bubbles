@@ -1,0 +1,49 @@
+children:
+- children:
+  - children:
+    - children: []
+      filename: null
+      id: 3
+      name: filter/binary_edge
+      type: binary
+      x: 627.5201204678107
+      y: 464.53559995845853
+    filename: null
+    id: 2
+    name: binarization/otsu
+    type: binary
+    x: 564.5738164579456
+    y: 318.5928589505073
+  filename: null
+  id: 1
+  name: filter/gaussian
+  type: intensity
+  x: 412.6696295046159
+  y: 364.5203784776712
+filename: human_mitosis_small.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 1.0628820000000003
+x: 254.23834605904793
+y: 369.9305804681997
+title: "Level 2: Segmentation"
+function_filters:
+- gaussian
+- median
+- mean
+- minimum
+- maximum
+- top_hat
+- otsu
+- voronoi-otsu
+- connected_components
+- dilate_labels
+- erode_labels
+- dilate
+- erode
+- outlines
+- binary_edge
+

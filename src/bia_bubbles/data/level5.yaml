@@ -1,0 +1,37 @@
+children:
+- children:
+  - children: []
+    filename: null
+    id: 2
+    name: label/connected_components
+    type: label
+    x: 532.2598483835624
+    y: 351.39553789263056
+  filename: null
+  id: 1
+  name: filter/split_touching_objects
+  type: binary
+  x: 382.42003148606597
+  y: 297.83969763790526
+filename: binary_blobs.png
+id: 0
+name: original
+type: binary
+view_settings:
+  rotation: 0
+  scale: 1.0628820000000003
+x: 225.7860857301275
+y: 322.8958399029558
+title: "Level 5: Split touching objects"
+function_filters:
+- split_touching_objects
+- connected_components
+- otsu
+- maximum
+- minimum
+- voronoi-otsu
+- mode
+- dilate_labels
+- erode_labels
+- dilate
+- erode
