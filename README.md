@@ -1,4 +1,4 @@
-# BIA-bubbles: Test Your Bioimage Analysis Skills! 🧪
+# BIA-bubbles: Test Your Bioimage Analysis Skills! 🔬🖥️🕹️
 
 BIA-bubbles is an interactive game where you can put your bioimage analysis knowledge by solving bio-image analysis puzzles! 
 
