@@ -2,6 +2,8 @@
 
 BIA-bubbles is an interactive game where you can put your bioimage analysis knowledge by solving bio-image analysis puzzles! 
 
+![](https://github.com/haesleinhuepf/bia-bubbles/raw/main/docs/teaser.gif)
+
 ## The Challenge
 
 Can you process biological images to achieve the perfect result? Each level presents you with:
@@ -30,7 +32,8 @@ bia-bubbles
 
 Everything works by clicking or touching on a touch-screen. You can click on an image and select image processing steps. Use the mouse wheel to zoom in or out. You can also push around images to arrange them. To get rid of intermediate results, just push them against the playground border. Once you found a solution that's good enough, you move on to the next level.
 
-![](docs/bia-bubbles-demo.gif)
+![](https://github.com/haesleinhuepf/bia-bubbles/raw/main/docs/bia-bubbles-demo.gif)
+[Download high resolution video](https://github.com/haesleinhuepf/bia-bubbles/raw/main/docs/bia-bubbles-demo.mp4)
 
 Ready to test your bioimage analysis skills? Jump in and see if you can solve all the challenges! Whether you're a beginner learning the fundamentals or an expert honing your skills, BIA-bubbles offers a fun way to validate your bioimage analysis expertise. 🎯🔬
 
