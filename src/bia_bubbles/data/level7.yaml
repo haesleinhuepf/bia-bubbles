@@ -19,7 +19,17 @@ name: original
 type: intensity
 view_settings:
   rotation: 0
-  scale: 2.0293563055919965
+  scale: 1.5
 x: 448.6718846445718
-y: 830.6171201186245
+y: 230.6171201186245
 title: "Level 7: Uneven illumination"
+function_filters:
+- top_hat
+- gaussian
+- divide_by_gaussian
+- median
+- otsu
+- voronoi_otsu
+- connected_components
+- variance
+

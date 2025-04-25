@@ -52,6 +52,8 @@ Under the hood we are using
 * [pyclesperanto](https://github.com/clEsperanto/pyclesperanto) and [scikit-image](https://scikit-image.org/) for the image processing and
 * [pygame](https://www.pygame.org/news) for the user interface.
 
+The code was written mostly using [cursor](https://cursor.dev). Hence, @haesleinhuepf is onyl partially responsible for the code quality ;-)
+
 ## Contributing
 
 You can also save image processing workflows using the `Save` button and submit them as pull-request to create a new level! Just reach out by creating a [github-issue](https://github.com/haesleinhuepf/bia-bubbles/issues).

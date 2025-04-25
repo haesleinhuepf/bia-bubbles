@@ -27,8 +27,8 @@ type: intensity
 view_settings:
   rotation: 0
   scale: 0.515030951801824
-x: 1233.4699991420957
-y: 696.0669628592356
+x: 433.4699991420957
+y: 296.0669628592356
 title: "Level 11: Maize cells"
 function_filters:
 - remove_large

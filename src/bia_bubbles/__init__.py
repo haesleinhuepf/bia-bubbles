@@ -416,7 +416,7 @@ class ImageScatter:
 
 
 class ImageProcessingCanvas:
-    def __init__(self, width=800, height=600, function_collection=None):
+    def __init__(self, width=1024, height=768, function_collection=None):
         pygame.init()
         # Set window title
         pygame.display.set_caption("Bio-image Analysis in Bubbles - BIA-bubbles")
@@ -474,7 +474,7 @@ class ImageProcessingCanvas:
         
         # Find max level number by checking for level{n}.yaml files
         max_level = 1
-        while os.path.exists(f"level{max_level}.yaml"):
+        while os.path.exists(os.path.join(os.path.dirname(__file__), f"data/level{max_level}.yaml")):
             max_level += 1
         max_level -= 1  # Adjust since we went one too far
         
@@ -1747,7 +1747,6 @@ class ImageProcessingCanvas:
             max(img.radius, min(self.width - img.radius, new_pos[0])),
             max(img.radius, min(self.height - img.radius, new_pos[1]))
         )
-        print("min_distance", self.min_distance)
         
         # Scale the minimum distance with the current zoom level
         scaled_min_distance = self.min_distance * self.scale
@@ -2408,7 +2407,8 @@ class ImageProcessingCanvas:
             for i, button_rect in enumerate(self.level_buttons, 1):
                 if button_rect.collidepoint(pos):
                     # Load the corresponding level file
-                    level_file = f"level{i}.yaml"
+                    
+                    level_file = os.path.join(os.path.dirname(__file__), f"data/level{i}.yaml")
                     try:
                         self.load_yaml_tree(level_file)
                     except Exception as e:
@@ -2593,8 +2593,16 @@ class ImageProcessingCanvas:
         self.screen.blit(text_surface, text_rect)
 
 
-# Example image processing functions
-def create_dummy_functions():
+def divide_by_gaussian(img, sigma_x, sigma_y):
+    result = cle.divide_by_gaussian_background(img, sigma_x=10, sigma_y=10)
+    return result * 255 / result.max()
+
+def scale_to_uint8(img):
+    return img * 255 / img.max()
+
+
+# Selected image processing functions
+def create_functions():
     """
     Create a collection of image processing functions organized by the type of image they can be applied to.
     Uses pyclesperanto for GPU-accelerated image processing.
@@ -2677,7 +2685,7 @@ def create_dummy_functions():
             'minimum': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'mean': lambda img: to_numpy(cle.mean_box(to_cle(img), radius_x=2, radius_y=2)),
-            'variance': lambda img: to_numpy(cle.variance_box(to_cle(img), radius_x=2, radius_y=2)),
+            'variance': lambda img: to_numpy(scale_to_uint8(cle.variance_box(to_cle(img), radius_x=2, radius_y=2))),
             'invert': lambda img: to_numpy(np.max(img) - img)
         },
         'binarization': {
@@ -2691,7 +2699,7 @@ def create_dummy_functions():
         },
         'background': {
             'subtract_gaussian': lambda img: to_numpy(cle.subtract_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)),
-            'divide_by_gaussian': lambda img: to_numpy(cle.divide_by_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10))
+            'divide_by_gaussian': lambda img: to_numpy(scale_to_uint8(cle.divide_by_gaussian_background(to_cle(img), sigma_x=10, sigma_y=10)))
         }
     }
     
@@ -2731,9 +2739,9 @@ def create_dummy_functions():
             'outlines': lambda img: to_numpy(cle.reduce_labels_to_label_edges(to_cle(img)))
         },
         'measure': {
-            'mean_extension': lambda img: to_numpy(cle.mean_extension_map(to_cle(img))),
-            'pixel_count': lambda img: to_numpy(cle.pixel_count_map(to_cle(img))),
-            'extension_ratio': lambda img: to_numpy(cle.extension_ratio_map(to_cle(img)))
+            'mean_extension': lambda img: to_numpy(scale_to_uint8(cle.mean_extension_map(to_cle(img)))),
+            'pixel_count': lambda img: to_numpy(scale_to_uint8(cle.pixel_count_map(to_cle(img)))),
+            'extension_ratio': lambda img: to_numpy(scale_to_uint8(cle.extension_ratio_map(to_cle(img))))
         }
     }
     
@@ -2758,7 +2766,7 @@ def filter_functions(categories, valid_names):
     for c_name, functions in categories.items():
         filtered_functions = {}
         for name, function in functions.items():
-            if name in valid_names:
+            if name in valid_names or name.replace('_', '-') in valid_names or name.replace('-', '_') in valid_names:
                 filtered_functions[name] = function
             else:
                 print("ignoring", name)
@@ -2770,7 +2778,7 @@ def filter_functions(categories, valid_names):
 
 def main():
     # Create canvas with our enhanced function collection
-    canvas = ImageProcessingCanvas(800, 600, create_dummy_functions())
+    canvas = ImageProcessingCanvas(1024, 768, create_functions())
     
     # Load level1.yaml instead of an image
     canvas.load_yaml_tree(os.path.join(os.path.dirname(__file__), f"data/level1.yaml"))
