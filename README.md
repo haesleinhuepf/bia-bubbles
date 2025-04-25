@@ -37,7 +37,15 @@ Ready to test your bioimage analysis skills? Jump in and see if you can solve al
 
 If you solved all levels, but still can't get enough, just drag-and-drop a microscopy image on the playground and experiment with. 
 
+## Acknowledgments
+
+We are happy that we could use example images from others in this repository.
+* Maize from [David Leglands' Mathematical Morphology Training Materials](https://github.com/dlegland/mathematical_morphology_with_MorphoLibJ/) licensed [CC-BY 4.0](https://github.com/dlegland/mathematical_morphology_with_MorphoLibJ/blob/master/LICENSE).
+* A cropped version of the [human mitosis dataset in scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.human_mitosis).
+* A single slice of the [cells3d dataset in scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.cells3d).
+* The blobs image from [ImageJ](https://imagej.net).
+
 ## Contributing
 
-You can also save image processing workflows using the `Save` button and submit them as pull-request to create a new level! Just reach out by creating a [github-issue]().
+You can also save image processing workflows using the `Save` button and submit them as pull-request to create a new level! Just reach out by creating a [github-issue](https://github.com/haesleinhuepf/bia-bubbles/issues).
 
