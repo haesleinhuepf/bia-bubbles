@@ -99,6 +99,8 @@ class ImageScatter:
         display_array = display_array.astype(np.uint8)
             
         self.surface = pygame.surfarray.make_surface(display_array)
+        self.radius = 100
+        self.min_distance = 100
         
     def _label_to_rgb(self, array):
         """Convert a label image to RGB using a custom colormap.
@@ -238,14 +240,14 @@ class ImageScatter:
         
         # Create a circular mask
         mask_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
-        radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
-        
+        self.radius = min(transformed_surface.get_width(), transformed_surface.get_height()) * 0.4
+
         # If this image is animating, scale the radius
         if self.is_animating:
-            radius *= self.animation_scale
+            self.radius *= self.animation_scale
         
         center = (transformed_surface.get_width() // 2, transformed_surface.get_height() // 2)
-        pygame.draw.circle(mask_surface, (255, 255, 255, 255), center, radius)
+        pygame.draw.circle(mask_surface, (255, 255, 255, 255), center, self.radius)
         
         # Create a temporary surface for the masked image
         temp_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
@@ -261,13 +263,13 @@ class ImageScatter:
         surface.blit(temp_surface, rect)
         
         # Draw white outline around the circle
-        pygame.draw.circle(surface, (255, 255, 255), pos, radius, 2)
+        pygame.draw.circle(surface, (255, 255, 255), pos, self.radius, 2)
         
         # Render name if provided
         if self.name:
-            self.render_name(surface, pos, radius, is_proposal=False, scale=scale)
+            self.render_name(surface, pos, self.radius, is_proposal=False, scale=scale)
         elif self.function_name:
-            self.render_name(surface, pos, radius, is_proposal=True, scale=scale)
+            self.render_name(surface, pos, self.radius, is_proposal=True, scale=scale)
 
     def render_name(self, surface, pos, radius, is_proposal=False, scale=1.0):
         """Render the name of this image.
@@ -1185,6 +1187,7 @@ class ImageProcessingCanvas:
         # Render images
         for img_id, img in self.images.items():
             img.render(self.screen, self.scale)
+            self.min_distance = img.radius / self.scale * 2.1
         
         # Render temporary proposals
         for prop_id, prop in self.temporary_proposals.items():
@@ -1614,18 +1617,18 @@ class ImageProcessingCanvas:
             new_y = pos1[1] + vy
             
             # Keep images within bounds with a bounce effect
-            if new_x < 50:
-                new_x = 50
+            if new_x < img2.radius:
+                new_x = img2.radius
                 vx = abs(vx) * 0.5  # Bounce with reduced velocity
-            elif new_x > self.width - 50:
-                new_x = self.width - 50
+            elif new_x > self.width - img2.radius:
+                new_x = self.width - img2.radius
                 vx = -abs(vx) * 0.5  # Bounce with reduced velocity
                 
-            if new_y < 50:
-                new_y = 50
+            if new_y < img2.radius:
+                new_y = img2.radius
                 vy = abs(vy) * 0.5  # Bounce with reduced velocity
-            elif new_y > self.height - 50:
-                new_y = self.height - 50
+            elif new_y > self.height - img2.radius:
+                new_y = self.height - img2.radius
                 vy = -abs(vy) * 0.5  # Bounce with reduced velocity
             
             # Update position
@@ -1658,8 +1661,8 @@ class ImageProcessingCanvas:
                 new_y = current_pos[1] * self.related_position_preference + (current_pos[1] + dy * follow_delay) * (1 - self.related_position_preference)
                 
                 # Keep within bounds
-                new_x = max(50, min(self.width - 50, new_x))
-                new_y = max(50, min(self.height - 50, new_y))
+                new_x = max(img2.radius, min(self.width - img2.radius, new_x))
+                new_y = max(img2.radius, min(self.height - img2.radius, new_y))
                 
                 # Update position
                 related_img.set_pos((new_x, new_y))
@@ -1735,11 +1738,14 @@ class ImageProcessingCanvas:
             self.remove_image_and_children(img_id)
             return False
         
+        img = self.images[img_id]
+        
         # Keep the dragged image within bounds
         new_pos = (
-            max(50, min(self.width - 50, new_pos[0])),
-            max(50, min(self.height - 50, new_pos[1]))
+            max(img.radius, min(self.width - img.radius, new_pos[0])),
+            max(img.radius, min(self.height - img.radius, new_pos[1]))
         )
+        print("min_distance", self.min_distance)
         
         # Scale the minimum distance with the current zoom level
         scaled_min_distance = self.min_distance * self.scale
@@ -1770,8 +1776,8 @@ class ImageProcessingCanvas:
                     
                     # Keep within bounds
                     new_other_pos = (
-                        max(50, min(self.width - 50, new_other_pos[0])),
-                        max(50, min(self.height - 50, new_other_pos[1]))
+                        max(img.radius, min(self.width - img.radius, new_other_pos[0])),
+                        max(img.radius, min(self.height - img.radius, new_other_pos[1]))
                     )
                     
                     # Update other image's position
@@ -2447,9 +2453,8 @@ class ImageProcessingCanvas:
         if result_id is not None:
             # Calculate position in bottom right corner with margin
             # Scale the margin with the current zoom level to maintain consistent visual distance
-            base_margin = 50  # Base margin in pixels
-            scaled_margin = base_margin * self.scale
-            
+            scaled_margin = img.radius
+
             # Calculate position in bottom right corner
             new_pos = (self.width - scaled_margin, self.height - scaled_margin)
             
@@ -2489,7 +2494,7 @@ class ImageProcessingCanvas:
             img2_array = np.asarray(img2_array)
             
             # determine overlap
-            overlap = confusion_matrix(img1_array.ravel(), img2_array.ravel())
+            overlap = confusion_matrix(img2_array.ravel(), img1_array.ravel())
             
             # crop out region in confusion matrix where reference labels are
             num_labels_reference = int(img1_array.max())
