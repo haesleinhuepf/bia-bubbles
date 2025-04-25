@@ -23,3 +23,15 @@ view_settings:
 x: 225.7860857301275
 y: 322.8958399029558
 title: "Level 5: Split touching objects"
+function_filters:
+- split_touching_objects
+- connected_components
+- otsu
+- maximum
+- minimum
+- voronoi-otsu
+- mode
+- dilate_labels
+- erode_labels
+- dilate
+- erode

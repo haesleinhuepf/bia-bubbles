@@ -519,6 +519,7 @@ class ImageProcessingCanvas:
         self.click_threshold = 200  # milliseconds to distinguish click from drag
         
         self.function_collection = function_collection or {}
+        self.function_filters = None
         
     def add_image(self, array, parent_id=None, pos=None, image_type=None, filename=None, name=None):
         """Add a new image to the canvas.
@@ -618,7 +619,7 @@ class ImageProcessingCanvas:
         
         # Get the appropriate functions for this image type
         if img_type in self.function_collection:
-            type_functions = self.function_collection[img_type]
+            type_functions = filter_functions(self.function_collection[img_type], self.function_filters)
             
             # Calculate total number of proposals
             total_functions = sum(len(funcs) for funcs in type_functions.values())
@@ -692,6 +693,11 @@ class ImageProcessingCanvas:
         Returns:
             str: 'intensity', 'binary', or 'label'
         """
+        if function_name == 'minimum':
+            return input_type
+        if function_name == 'maximum':
+            return input_type
+            
         # Threshold functions convert intensity to binary
         if input_type == 'intensity' and category == 'binarization':
             return 'binary'
@@ -701,6 +707,8 @@ class ImageProcessingCanvas:
 
         # Connected components convert binary to label
         if input_type == 'binary' and function_name == 'connected_components':
+            return 'label'
+        if input_type == 'binary' and function_name == 'label_spots':
             return 'label'
         if input_type == 'binary' and function_name == 'distance_map':
             return 'intensity'
@@ -840,6 +848,10 @@ class ImageProcessingCanvas:
                                 )
                                 # Check if we should load next level
                                 self.check_quality_and_load_next_level()
+
+                                if self.level_completed:
+                                    self.images[result_id].parent_id = new_img_id
+                                    print(f"Connected result image to {new_img_id}")
                             else:
                                 self.quality_metric = None
                         else:
@@ -1201,7 +1213,8 @@ class ImageProcessingCanvas:
             correct_text = self.correct_font.render("Correct!", True, (0, 255, 0))  # Green text
             correct_rect = correct_text.get_rect(center=(self.width // 2, self.height // 2))
             self.screen.blit(correct_text, correct_rect)
-        
+            
+
         # Update the display
         pygame.display.flip()
 
@@ -2072,6 +2085,7 @@ class ImageProcessingCanvas:
             
             # clear canvas
             self.clear_canvas()
+            self.function_filters = None
             self.title = ""
 
             # Add the image to the canvas
@@ -2101,6 +2115,9 @@ class ImageProcessingCanvas:
             # Load the YAML file
             with open(filepath, 'r') as f:
                 tree_data = yaml.safe_load(f)
+
+            # Extract function filters if present
+            self.function_filters = tree_data.get('function_filters', None)
                 
             # Extract title if present
             self.title = tree_data.get('title', None)
@@ -2540,6 +2557,8 @@ class ImageProcessingCanvas:
             self.level_completion_time = pygame.time.get_ticks()
             self.quality_metric = None
         
+        
+        
             
     def load_next_level(self):
         """Load the next level if available."""
@@ -2657,6 +2676,7 @@ def create_dummy_functions():
         'binarization': {
             'otsu': lambda img: to_numpy(cle.threshold_otsu(to_cle(img))),
             'morphological_chan_vese': lambda img: to_numpy(cle.morphological_chan_vese(to_cle(img), num_iter=10)),
+            'detect_maxima': lambda img: to_numpy(cle.detect_maxima(to_cle(img), radius_x=2, radius_y=2))
         },
         'label': {
             'watershed': local_minima_seeded_watershed,
@@ -2671,6 +2691,8 @@ def create_dummy_functions():
     # Functions for binary images
     binary_functions = {
         'filter': {
+            'minimum': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
+            'maximum': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'dilate': lambda img: to_numpy(cle.maximum_box(to_cle(img), radius_x=2, radius_y=2)),
             'erode': lambda img: to_numpy(cle.minimum_box(to_cle(img), radius_x=2, radius_y=2)),
             'open': lambda img: to_numpy(cle.opening_box(to_cle(img), radius_x=2, radius_y=2)),
@@ -2682,6 +2704,7 @@ def create_dummy_functions():
         },
         'label': {
             'connected_components': lambda img: to_numpy(cle.connected_component_labeling(to_cle(img))).astype(np.int32),
+            'label_spots': lambda img: to_numpy(cle.label_spots(to_cle(img)))
         }
     }
     
@@ -2690,10 +2713,11 @@ def create_dummy_functions():
         'filter': {
             'erode_labels': lambda img: to_numpy(cle.erode_labels(to_cle(img), radius=2)),
             'dilate_labels': lambda img: to_numpy(cle.dilate_labels(to_cle(img), radius=2)),
-            'smooth_labels': lambda img: to_numpy(cle.smooth_labels(to_cle(img), radius=2)),
+            'smooth_labels': lambda img: to_numpy(cle.smooth_labels(to_cle(img), radius=5)),
             'extend_via_voronoi': lambda img: to_numpy(cle.extend_labeling_via_voronoi(to_cle(img))),
             'remove_small': lambda img: to_numpy(cle.remove_small_labels(to_cle(img), minimum_size=100)),
-            'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000))
+            'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000)),
+            'mode': lambda img: to_numpy(cle.mode_box(to_cle(img), radius_x=2, radius_y=2))
         },
         'reduce': {
             'centroids': lambda img: to_numpy(cle.reduce_labels_to_centroids(to_cle(img))),
@@ -2715,6 +2739,26 @@ def create_dummy_functions():
     }
     
     return functions
+
+def filter_functions(categories, valid_names):
+    """Filter functions based on valid names."""
+    if valid_names is None:
+        return categories
+    
+    print("valid_names", valid_names)
+
+    filtered_categories = {}
+    for c_name, functions in categories.items():
+        filtered_functions = {}
+        for name, function in functions.items():
+            if name in valid_names:
+                filtered_functions[name] = function
+            else:
+                print("ignoring", name)
+        if len(filtered_functions) > 0:
+            filtered_categories[c_name] = filtered_functions
+        
+    return filtered_categories
 
 # Demo
 if __name__ == "__main__":

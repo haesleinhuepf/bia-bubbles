@@ -1,0 +1,22 @@
+children:
+- children: []
+  filename: null
+  id: 1
+  name: filter/open
+  type: binary
+  x: 622.3293571177408
+  y: 320.7231897532891
+filename: binary_noise.png
+id: 0
+name: original
+type: binary
+view_settings:
+  rotation: 0
+  scale: 1.405463768396063
+x: 414.67948487588825
+y: 287.1831671408878
+title: "Level 8: Binary morphology"
+function_filters:
+- erode
+- dilate
+

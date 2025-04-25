@@ -1,0 +1,45 @@
+children:
+- children:
+  - children:
+    - children: []
+      filename: null
+      id: 3
+      name: filter/remove_large
+      type: label
+      x: 1489.5612022584685
+      y: 735.5707177155183
+    filename: null
+    id: 2
+    name: label/connected_components
+    type: label
+    x: 1450.176763484093
+    y: 669.2237502918923
+  filename: null
+  id: 1
+  name: binarization/morphological_chan_vese
+  type: binary
+  x: 1378.0874462527693
+  y: 696.4280848630511
+filename: maize_clsm.tif
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 0.515030951801824
+x: 1233.4699991420957
+y: 696.0669628592356
+title: "Level 11: Maize cells"
+function_filters:
+- remove_large
+- connected_components
+- morphological_chan_vese
+- otsu
+- voronoi-otsu
+- dilate_labels
+- erode_labels
+- dilate
+- erode
+- top-hat
+- gaussian
+- median

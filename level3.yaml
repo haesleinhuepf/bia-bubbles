@@ -25,3 +25,10 @@ view_settings:
 x: 238.73431712524092
 y: 252.5576351653638
 title: "Level 3: Label nuclei"
+function_filters:
+- voronoi-otsu
+- otsu
+- morphological_chan_vese
+- connected_components
+- erode
+- dilate

@@ -16,3 +16,15 @@ view_settings:
 x: 345.4734715378323
 y: 262.8465139618986
 title: "Level 6: Cells and membranes"
+function_filters:
+- watershed
+- erode_labels
+- outlines
+- connected_components
+- otsu
+- voronoi-otsu
+- dilate_labels
+- erode_labels
+- dilate
+- erode
+

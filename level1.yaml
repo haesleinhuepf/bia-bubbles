@@ -18,3 +18,10 @@ view_settings:
 x: 255.06017619716908
 y: 310.7365831289068
 title: "Level 1: Denoising"
+function_filters:
+- median
+- gaussian
+- mean
+- minimum
+- maximum
+- top_hat

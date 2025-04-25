@@ -30,3 +30,12 @@ view_settings:
 x: 222.70893616262748
 y: 301.19097040168043
 title: "Level 4: Label nuclear envelope"
+function_filters:
+- voronoi-otsu
+- otsu
+- morphological_chan_vese
+- connected_components
+- outlines
+- erode
+- dilate
+- binary_edge

@@ -1,0 +1,25 @@
+children:
+- children:
+  - children: []
+    filename: null
+    id: 2
+    name: label/voronoi-otsu
+    type: label
+    x: 949.9376673761412
+    y: 862.5884329635419
+  filename: null
+  id: 1
+  name: filter/top_hat
+  type: intensity
+  x: 709.628297520581
+  y: 677.3582029311119
+filename: uneven_illumination.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 2.0293563055919965
+x: 448.6718846445718
+y: 830.6171201186245
+title: "Level 7: Uneven illumination"

@@ -1,0 +1,55 @@
+children:
+- children:
+  - children:
+    - children:
+      - children: []
+        filename: null
+        id: 4
+        name: filter/dilate_labels
+        type: label
+        x: 609.9808012936757
+        y: 344.1357208430042
+      filename: null
+      id: 3
+      name: label/label_spots
+      type: label
+      x: 433.5612844410507
+      y: 327.9003838966309
+    filename: null
+    id: 2
+    name: binarization/detect_maxima
+    type: binary
+    x: 507.1455400786275
+    y: 488.50159329561353
+  filename: null
+  id: 1
+  name: filter/gaussian
+  type: intensity
+  x: 331.59407921255433
+  y: 471.4709437285936
+filename: human_mitosis_small_wo_bg.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 1.1809800000000004
+x: 189.90368802006944
+y: 366.9758089821829
+title: "Level 10: Local maxima"
+function_filters:
+- gaussian
+- mean
+- meadian
+- detect_maxima
+- voronoi-otsu
+- connected_components
+- label_spots
+- dilate_labels
+- erode_labels
+- dilate
+- erode
+- extend_via_voronoi
+- centroids
+
+

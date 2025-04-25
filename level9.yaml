@@ -1,0 +1,44 @@
+children:
+- children:
+  - children:
+    - children: []
+      filename: null
+      id: 3
+      name: filter/dilate_labels
+      type: label
+      x: 613.0892379324326
+      y: 411.7700173809133
+    filename: null
+    id: 2
+    name: reduce/outlines
+    type: label
+    x: 566.8208519275988
+    y: 305.49055639911796
+  filename: null
+  id: 1
+  name: label/watershed
+  type: label
+  x: 455.5099843177372
+  y: 337.3195289608632
+filename: membranes.png
+id: 0
+name: original
+type: intensity
+view_settings:
+  rotation: 0
+  scale: 0.7748409780000003
+x: 339.32937358106847
+y: 341.3050765182933
+title: "Level 9: Thick outlines"
+function_filters:
+- invert
+- voronoi-otsu
+- connected_components
+- watershed
+- outlines
+- dilate_labels
+- erode_labels
+- minimum
+- maximum
+- erode
+- dilate
