@@ -422,9 +422,6 @@ class ImageProcessingCanvas:
         pygame.display.set_caption("Bio-image Analysis in Bubbles - BIA-bubbles")
         # Create resizable window with drag and drop support
         self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE | pygame.DROPFILE)
-                
-        from pygame._sdl2 import Window
-        Window.from_display_module().maximize()
 
         self.clock = pygame.time.Clock()
         
@@ -654,7 +651,7 @@ class ImageProcessingCanvas:
                     try:
                         # Process image using numpy array
                         result_array = func(self.images[img_id].get_array())
-                        
+
                         # Determine the result image type
                         result_type = self.determine_result_type(img_type, category, name)
                         
@@ -2397,7 +2394,7 @@ class ImageProcessingCanvas:
         metric_name, metric_value = self.quality_metric
         
         # Check if metrics meet thresholds
-        if metric_name == "MSE:" and metric_value < 0.001:
+        if metric_name == "MSE:" and metric_value < 0.0001:
             self.level_completed = True
             self.level_completion_time = pygame.time.get_ticks()
             self.quality_metric = None
