@@ -498,7 +498,6 @@ class ImageProcessingCanvas:
         self.width = width
         self.height = height
         self.scale = 1.0
-        self.rotation = 0
         
         self.dragging = False
         self.dragged_image_id = None  # Track which image is being dragged
@@ -506,7 +505,7 @@ class ImageProcessingCanvas:
         self.multi_touch = False
         self.touch_points = []
         self.initial_touch_distance = 0
-        self.initial_touch_angle = 0
+        self.max_touch_points = 0
         
         # Add relaxation variables
         self.relaxing = False
@@ -790,6 +789,7 @@ class ImageProcessingCanvas:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
+                    self.max_touch_points = max(1, self.max_touch_points)
                     # Check if level button was clicked
                     if self.handle_level_button_click(event.pos):
                         continue
@@ -882,17 +882,7 @@ class ImageProcessingCanvas:
                                 self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
                                 image_clicked = True
                                 break
-                        
-                        # If no image was clicked and we have proposals, clear them and start panning
-                        if not image_clicked and self.temporary_proposals:
-                            self.temporary_proposals.clear()
-                            self.start_relaxation()
-                            self.panning = True
-                            self.pan_start = event.pos
-                        # If no image was clicked and no proposals, just start panning
-                        elif not image_clicked:
-                            self.panning = True
-                            self.pan_start = event.pos
+                    
                 
                 elif event.button == 3:  # Right click
                     # Check if we clicked on an image
@@ -901,14 +891,9 @@ class ImageProcessingCanvas:
                         if self.is_result_image(self.clicked_image_id):
                             return True
                             
-                        # If we clicked on an image, handle rotation
+                        # If we clicked on an image, handle dragging
                         self.dragging = True
                         self.drag_start = event.pos
-                        self.initial_rotation = self.rotation
-                    else:
-                        # If we didn't click on an image, handle panning
-                        self.panning = True
-                        self.pan_start = event.pos
                 
                 elif event.button == 2:  # Middle click
                     pass  # Disabled middle click panning
@@ -929,19 +914,41 @@ class ImageProcessingCanvas:
                             # Process the image to show proposals
                             self.process_image(self.clicked_image_id)
                     
+
+                    image_clicked = False
+                    for img_id in self.images:
+                        # Skip result images
+                        if self.is_result_image(img_id):
+                            continue
+                            
+                        if self.point_in_image(event.pos, img_id):
+                            # Store click information for potential drag or click
+                            self.click_start_time = pygame.time.get_ticks()
+                            self.click_start_pos = event.pos
+                            self.clicked_image_id = img_id
+                            # Calculate offset from mouse to image center for potential drag
+                            img_pos = self.images[img_id].get_pos()
+                            self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
+                            image_clicked = True
+                            break
+                    
+                    # If no image was clicked and we have proposals, clear them and start panning
+                    if not image_clicked and self.temporary_proposals and self.max_touch_points < 2:
+                        self.temporary_proposals.clear()
+                        print("self.multi_touch", self.multi_touch)
+
                     # Reset all states
                     self.dragging = False
                     self.dragged_image_id = None
                     self.clicked_image_id = None
                     self.click_start_pos = None
-                    self.panning = False
-                    
+                    self.max_touch_points = 0
+
                     # Start relaxation if we were dragging
                     if self.dragging:
                         self.start_relaxation()
                 elif event.button == 3:  # Right click
                     self.dragging = False
-                    self.panning = False
                 elif event.button == 2:  # Middle click
                     pass  # Disabled middle click panning
             
@@ -1018,43 +1025,55 @@ class ImageProcessingCanvas:
             elif event.type == pygame.FINGERDOWN:
                 touch_pos = (event.x * self.screen.get_width(),
                            event.y * self.screen.get_height())
-                self.touch_points.append(touch_pos)
-                if len(self.touch_points) == 2:
+                
+                # Ensure we don't add duplicate finger IDs
+                while len(self.touch_points) <= event.finger_id:
+                    self.touch_points.append(None)
+                self.touch_points[event.finger_id] = touch_pos
+                
+                # Check if we now have two fingers
+                active_touch_points = [p for p in self.touch_points if p is not None]
+                self.max_touch_points = len(active_touch_points)
+                if len(active_touch_points) == 2:
                     # Two fingers down - enable multi-touch and disable panning
                     self.multi_touch = True
-                    self.initial_touch_distance = dist(*self.touch_points)
-                    self.initial_touch_angle = atan2(self.touch_points[1][1] - self.touch_points[0][1],
-                                                   self.touch_points[1][0] - self.touch_points[0][0])
+                    self.initial_touch_distance = dist(*active_touch_points)
+                   
             
             elif event.type == pygame.FINGERUP:
                 # Remove the finger that was lifted
                 finger_id = event.finger_id
                 if finger_id < len(self.touch_points):
-                    self.touch_points.pop(finger_id)
+                    self.touch_points[finger_id] = None
                 
                 # Update touch states based on remaining fingers
-                if len(self.touch_points) == 0:
-                    # No fingers left - disable multi-touch
-                    self.multi_touch = False
-                elif len(self.touch_points) == 1:
-                    # One finger left - disable multi-touch
+                active_touch_points = [p for p in self.touch_points if p is not None]
+                if len(active_touch_points) < 2:
+                    # Less than two fingers left - disable multi-touch
                     self.multi_touch = False
             
             elif event.type == pygame.FINGERMOTION:
                 # Update the touch points list with the current position
                 finger_id = event.finger_id
-                if finger_id < len(self.touch_points):
-                    self.touch_points[finger_id] = (event.x * self.screen.get_width(),
-                                                  event.y * self.screen.get_height())
+                touch_pos = (event.x * self.screen.get_width(),
+                           event.y * self.screen.get_height())
+                
+                # Ensure we have enough space in the touch_points list
+                while len(self.touch_points) <= finger_id:
+                    self.touch_points.append(None)
+                self.touch_points[finger_id] = touch_pos
+                
+                # Get active touch points (not None)
+                active_touch_points = [p for p in self.touch_points if p is not None]
+                self.max_touch_points = max(self.max_touch_points, len(active_touch_points))
                 
                 # Check if we have multiple fingers touching the screen
-                if len(self.touch_points) >= 2:
-                    # We have multiple fingers - handle multi-touch for zoom and rotation
+                if len(active_touch_points) >= 2:
+                    # We have multiple fingers - handle multi-touch for zoom
                     self.multi_touch = True
                     
                     # Use only the first two touch points for calculations
-                    # This ensures we don't get more than 2 arguments for dist()
-                    current_points = self.touch_points[:2]
+                    current_points = active_touch_points[:2]
                     current_distance = dist(*current_points)
                     
                     # Calculate zoom factor based on the ratio of current distance to initial distance
@@ -1065,14 +1084,14 @@ class ImageProcessingCanvas:
                         
                         # Apply a scaling factor to make the zoom more manageable
                         # This dampens the effect of the ratio to prevent too rapid zooming
-                        scaling_factor = 0.1  # Adjust this value to control zoom sensitivity
+                        scaling_factor = 0.4  # Increased from 0.1 to make zoom more responsive
                         
                         # Calculate the zoom factor based on the ratio and scaling
                         # If ratio > 1, we're zooming in; if ratio < 1, we're zooming out
                         zoom_factor = 1.0 + (distance_ratio - 1.0) * scaling_factor
                         
                         # Ensure the zoom factor stays within reasonable bounds
-                        zoom_factor = max(0.95, min(1.05, zoom_factor))
+                        zoom_factor = max(0.9, min(1.1, zoom_factor))  # Increased range for more zoom
                         
                         # Calculate center point for zoom (midpoint between the two fingers)
                         center = ((current_points[0][0] + current_points[1][0])/2,
@@ -1081,15 +1100,9 @@ class ImageProcessingCanvas:
                         # Apply zoom relative to center point
                         self.zoom_at_point(center, zoom_factor)
                     
-                    # Handle rotation
-                    current_angle = atan2(current_points[1][1] - current_points[0][1],
-                                        current_points[1][0] - current_points[0][0])
-                    self.rotation += current_angle - self.initial_touch_angle
-                    
                     # Update initial values for next frame
                     self.initial_touch_distance = current_distance
-                    self.initial_touch_angle = current_angle
-        
+                    
         return True
 
     def zoom_at_point(self, point, zoom_factor):
@@ -1128,34 +1141,6 @@ class ImageProcessingCanvas:
             new_dy = dy * zoom_factor
             # Set new position
             item.set_pos((point[0] + new_dx, point[1] + new_dy))
-            
-        # If we have proposals, ensure they maintain the same distance from their parent
-        if self.temporary_proposals:
-            # Get the parent image ID from any proposal (they all have the same parent)
-            parent_id = next(iter(self.temporary_proposals.values())).get_parent_id()
-            if parent_id in self.images:
-                parent_pos = self.images[parent_id].get_pos()
-                
-                # Calculate the original distance from parent to each proposal
-                for prop_id, prop in self.temporary_proposals.items():
-                    prop_pos = prop.get_pos()
-                    # Calculate vector from parent to proposal
-                    dx = prop_pos[0] - parent_pos[0]
-                    dy = prop_pos[1] - parent_pos[1]
-                    # Calculate distance
-                    distance = (dx*dx + dy*dy) ** 0.5
-                    
-                    # Calculate angle
-                    angle = atan2(dy, dx)
-                    
-                    # Calculate new position maintaining the same angle but with adjusted distance
-                    # We need to scale the distance by the zoom factor to maintain visual consistency
-                    new_distance = distance * zoom_factor
-                    new_x = parent_pos[0] + cos(angle) * new_distance
-                    new_y = parent_pos[1] + sin(angle) * new_distance
-                    
-                    # Set new position
-                    prop.set_pos((new_x, new_y))
                     
         # Move result image to bottom right corner after zooming
         self.move_result_to_bottom_right()
@@ -1268,11 +1253,10 @@ class ImageProcessingCanvas:
                     break
         
         # Apply transformations
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
+        transformed_surface = pygame.transform.rotozoom(surface, 0, self.scale)
         
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        # Get the rect for the transformed surface
+        rect = transformed_surface.get_rect(center=pos)
         
         # Create a circular mask
         mask_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
@@ -1296,7 +1280,7 @@ class ImageProcessingCanvas:
         self.screen.blit(temp_surface, rect)
         
         # Draw white outline around the circle
-        pygame.draw.circle(self.screen, (255, 255, 255), adjusted_pos, radius, 2)
+        pygame.draw.circle(self.screen, (255, 255, 255), pos, radius, 2)
         
         # Render name if provided (for both proposals and images)
         if function_name:
@@ -1879,147 +1863,6 @@ class ImageProcessingCanvas:
         
         pygame.display.flip()
 
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Left click
-                # Check if save button was clicked
-                if self.save_button_rect.collidepoint(event.pos):
-                    self.save_image_tree()
-                    # Don't return here, just continue with the rest of the method
-                    
-                # Check temporary proposals first
-                closest_proposal_id = None
-                closest_distance = float('inf')
-                
-                for prop_id, prop in self.temporary_proposals.items():
-                    if self.point_in_image(event.pos, prop_id, is_proposal=True):
-                        # Calculate distance to this proposal
-                        distance = self.distance_to_image(event.pos, prop_id, is_proposal=True)
-                        if distance < closest_distance:
-                            closest_distance = distance
-                            closest_proposal_id = prop_id
-                
-                # If we found a proposal, select the closest one
-                if closest_proposal_id is not None:
-                    # Get the proposal's image type before adding it
-                    proposal_type = self.temporary_proposals[closest_proposal_id].get_image_type()
-                    # Get the proposal's function name
-                    proposal_function_name = self.temporary_proposals[closest_proposal_id].get_function_name()
-                    # Get the parent_id from the proposal
-                    parent_id = self.temporary_proposals[closest_proposal_id].get_parent_id()
-                    # Add the proposal as a new image
-                    new_img_id = self.add_image(self.temporary_proposals[closest_proposal_id].get_array(), 
-                                         parent_id=parent_id,  # Use the proposal's parent_id
-                                         pos=self.temporary_proposals[closest_proposal_id].get_pos(),
-                                         image_type=proposal_type)
-                    # Set the name of the new image to the function name
-                    if proposal_function_name:
-                        self.images[new_img_id].set_name(proposal_function_name)
-                    self.temporary_proposals.clear()
-                    # Start relaxation after adding a new image
-                    self.start_relaxation()
-                # Then check permanent images
-                else:
-                    image_clicked = False
-                    for img_id in self.images:
-                        # Skip result images
-                        if self.is_result_image(img_id):
-                            continue
-                                
-                        if self.point_in_image(event.pos, img_id):
-                            # Store click information for potential drag or click
-                            self.click_start_time = pygame.time.get_ticks()
-                            self.click_start_pos = event.pos
-                            self.clicked_image_id = img_id
-                            # Calculate offset from mouse to image center for potential drag
-                            img_pos = self.images[img_id].get_pos()
-                            self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
-                            image_clicked = True
-                            break
-                        
-                        # If no image was clicked and we have proposals, clear them and start panning
-                        if not image_clicked and self.temporary_proposals:
-                            self.temporary_proposals.clear()
-                            self.start_relaxation()
-                            self.panning = True
-                            self.pan_start = event.pos
-                        # If no image was clicked and no proposals, just start panning
-                        elif not image_clicked:
-                            self.panning = True
-                            self.pan_start = event.pos
-            
-            elif event.button == 3:  # Right click
-                # Check if we clicked on an image
-                if self.clicked_image_id is not None and self.clicked_image_id in self.images:
-                    # Skip result images
-                    if self.is_result_image(self.clicked_image_id):
-                        return True
-                        
-                    # If we clicked on an image, handle rotation
-                    self.dragging = True
-                    self.drag_start = event.pos
-                    self.initial_rotation = self.rotation
-                else:
-                    # If we didn't click on an image, handle panning
-                    self.panning = True
-                    self.pan_start = event.pos
-            
-            elif event.button == 2:  # Middle click
-                pass  # Disabled middle click panning
-        
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1:  # Left click
-                # Check if this was a click (short press) or a drag
-                if self.clicked_image_id is not None and self.clicked_image_id in self.images:
-                    # Skip result images
-                    if self.is_result_image(self.clicked_image_id):
-                        return True
-                        
-                    current_time = pygame.time.get_ticks()
-                    time_diff = current_time - self.click_start_time
-                    
-                    # If it was a short press and the mouse hasn't moved much, treat as a click
-                    if time_diff < self.click_threshold and not self.dragging:
-                        # Process the image to show proposals
-                        self.process_image(self.clicked_image_id)
-                
-                # Reset all states
-                self.dragging = False
-                self.dragged_image_id = None
-                self.clicked_image_id = None
-                self.click_start_pos = None
-                self.panning = False
-                
-                # Start relaxation if we were dragging
-                if self.dragging:
-                    self.start_relaxation()
-            elif event.button == 3:  # Right click
-                self.dragging = False
-                self.panning = False
-            elif event.button == 2:  # Middle click
-                pass  # Disabled middle click panning
-        
-        elif event.type == pygame.MOUSEMOTION:
-            # Update save button hover state
-            self.save_button_hovered = self.save_button_rect.collidepoint(event.pos)
-            # Update level button hover state
-            self.level_button_hovered = self.level_button_rect.collidepoint(event.pos)
-            # Update solution button hover state
-            self.solution_button_hovered = self.solution_button_rect.collidepoint(event.pos)
-            
-            # Handle image dragging
-            for image in self.images.values():
-                if image.selected:
-                    image.move(event.pos)
-                    
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self.temporary_proposals.clear()
-                
-        elif event.type == pygame.VIDEORESIZE:
-            self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
-            # Update save button position
-            self.save_button_rect.bottom = event.h - 10
 
     def save_image_tree(self):
         """Save the current image tree structure to a YAML file."""
@@ -2057,8 +1900,7 @@ class ImageProcessingCanvas:
             
             # Add view settings to the tree data
             tree_data['view_settings'] = {
-                'scale': self.scale,
-                'rotation': self.rotation
+                'scale': self.scale
             }
             
             # Create a timestamp for the filename
@@ -2140,7 +1982,6 @@ class ImageProcessingCanvas:
             # Extract view settings if present
             view_settings = tree_data.get('view_settings', {})
             self.scale = view_settings.get('scale', 1.0)
-            self.rotation = view_settings.get('rotation', 0)
             self.view_offset_x = view_settings.get('view_offset_x', 0)
             self.view_offset_y = view_settings.get('view_offset_y', 0)
                 
