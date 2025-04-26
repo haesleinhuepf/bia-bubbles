@@ -2,5 +2,6 @@ pygame
 numpy
 matplotlib
 pyclesperanto
+pyclesperanto-prototype
 scikit-image
 scipy

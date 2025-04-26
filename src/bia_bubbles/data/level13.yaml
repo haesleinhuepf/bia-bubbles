@@ -1,0 +1,35 @@
+children:
+- children:
+  - children: []
+    filename: null
+    id: 3
+    name: measure/proximal_neighbor_count
+    type: intensity
+    x: 643.4338471397782
+    y: 476.44846200776146
+  filename: null
+  id: 2
+  name: label/connected_components
+  type: label
+  x: 412.4488495869716
+  y: 616.550083192327
+filename: "distant_blobs.png"
+id: 1
+name: original
+type: binary
+x: 406.05035689111355
+y: 347.2376334345631
+view_settings:
+  scale: 1.25843201886872
+title: "Level 13: Distant Blobs"
+function_filters:
+- erode
+- dilate
+- connected_components
+- mean_extension
+- pixel_count
+- extension_ratio
+- touching_neighbor_count
+- average_distance_of_6_nearest_neighbors
+- proximal_neighbor_count
+

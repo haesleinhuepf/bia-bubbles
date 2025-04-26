@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import math
 import pyclesperanto as cle
+import pyclesperanto_prototype as clep
 import yaml
 import os
 import datetime
@@ -2572,6 +2573,7 @@ def create_functions():
             'remove_small': lambda img: to_numpy(cle.remove_small_labels(to_cle(img), minimum_size=100)),
             'remove_large': lambda img: to_numpy(cle.remove_large_labels(to_cle(img), maximum_size=1000)),
             'mode': lambda img: to_numpy(cle.mode_box(to_cle(img), radius_x=2, radius_y=2)),
+            'merge_touching_labels': lambda img: to_numpy(clep.merge_touching_labels(to_cle(img))),
         },
         'reduce': {
             'centroids': lambda img: to_numpy(cle.reduce_labels_to_centroids(to_cle(img))),
@@ -2580,7 +2582,10 @@ def create_functions():
         'measure': {
             'mean_extension': lambda img: to_numpy(scale_to_uint8(cle.mean_extension_map(to_cle(img)))),
             'pixel_count': lambda img: to_numpy(scale_to_uint8(cle.pixel_count_map(to_cle(img)))),
-            'extension_ratio': lambda img: to_numpy(scale_to_uint8(cle.extension_ratio_map(to_cle(img))))
+            'extension_ratio': lambda img: to_numpy(scale_to_uint8(cle.extension_ratio_map(to_cle(img)))),
+            'touching_neighbor_count': lambda img: to_numpy(scale_to_uint8(clep.touching_neighbor_count_map(to_cle(img)))),
+            'average_distance_of_6_nearest_neighbors': lambda img: to_numpy(scale_to_uint8(clep.average_distance_of_n_closest_neighbors_map(to_cle(img), n=6))),
+            'proximal_neighbor_count': lambda img: to_numpy(scale_to_uint8(clep.proximal_neighbor_count_map(to_cle(img), max_distance=25))),
         }
     }
     
