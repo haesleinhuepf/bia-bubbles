@@ -1157,34 +1157,6 @@ class ImageProcessingCanvas:
             new_dy = dy * zoom_factor
             # Set new position
             item.set_pos((point[0] + new_dx, point[1] + new_dy))
-            
-        # If we have proposals, ensure they maintain the same distance from their parent
-        if self.temporary_proposals:
-            # Get the parent image ID from any proposal (they all have the same parent)
-            parent_id = next(iter(self.temporary_proposals.values())).get_parent_id()
-            if parent_id in self.images:
-                parent_pos = self.images[parent_id].get_pos()
-                
-                # Calculate the original distance from parent to each proposal
-                for prop_id, prop in self.temporary_proposals.items():
-                    prop_pos = prop.get_pos()
-                    # Calculate vector from parent to proposal
-                    dx = prop_pos[0] - parent_pos[0]
-                    dy = prop_pos[1] - parent_pos[1]
-                    # Calculate distance
-                    distance = (dx*dx + dy*dy) ** 0.5
-                    
-                    # Calculate angle
-                    angle = atan2(dy, dx)
-                    
-                    # Calculate new position maintaining the same angle but with adjusted distance
-                    # We need to scale the distance by the zoom factor to maintain visual consistency
-                    new_distance = distance * zoom_factor
-                    new_x = parent_pos[0] + cos(angle) * new_distance
-                    new_y = parent_pos[1] + sin(angle) * new_distance
-                    
-                    # Set new position
-                    prop.set_pos((new_x, new_y))
                     
         # Move result image to bottom right corner after zooming
         self.move_result_to_bottom_right()
