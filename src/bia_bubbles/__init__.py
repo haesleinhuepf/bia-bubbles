@@ -856,7 +856,6 @@ class ImageProcessingCanvas:
 
                                 if self.level_completed:
                                     self.images[result_id].parent_id = new_img_id
-                                    print(f"Connected result image to {new_img_id}")
                             else:
                                 self.quality_metric = None
                         else:
