@@ -422,6 +422,10 @@ class ImageProcessingCanvas:
         pygame.display.set_caption("Bio-image Analysis in Bubbles - BIA-bubbles")
         # Create resizable window with drag and drop support
         self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE | pygame.DROPFILE)
+                
+        from pygame._sdl2 import Window
+        Window.from_display_module().maximize()
+
         self.clock = pygame.time.Clock()
         
         self.images = {}  # {id: ImageScatter}
