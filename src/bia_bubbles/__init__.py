@@ -939,8 +939,7 @@ class ImageProcessingCanvas:
                     # If no image was clicked and we have proposals, clear them and start panning
                     if not image_clicked and self.temporary_proposals and self.max_touch_points < 2:
                         self.temporary_proposals.clear()
-                        print("self.multi_touch", self.multi_touch)
-
+                        
                     # Reset all states
                     self.dragging = False
                     self.dragged_image_id = None
@@ -2165,7 +2164,6 @@ class ImageProcessingCanvas:
             
     def remove_derived_images(self):
         """Remove all images derived from the original image (ID 0) except the result image."""
-        print("Removing derived images")
         # Get all images that are derived from the original image
         derived_images = []
         for img_id, img in self.images.items():
@@ -2605,8 +2603,6 @@ def filter_functions(categories, valid_names):
     if valid_names is None:
         return categories
     
-    print("valid_names", valid_names)
-
     filtered_categories = {}
     for c_name, functions in categories.items():
         filtered_functions = {}
