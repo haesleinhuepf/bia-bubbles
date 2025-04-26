@@ -498,7 +498,6 @@ class ImageProcessingCanvas:
         self.width = width
         self.height = height
         self.scale = 1.0
-        self.rotation = 0
         
         self.dragging = False
         self.dragged_image_id = None  # Track which image is being dragged
@@ -506,7 +505,6 @@ class ImageProcessingCanvas:
         self.multi_touch = False
         self.touch_points = []
         self.initial_touch_distance = 0
-        self.initial_touch_angle = 0
         self.max_touch_points = 0
         
         # Add relaxation variables
@@ -893,14 +891,9 @@ class ImageProcessingCanvas:
                         if self.is_result_image(self.clicked_image_id):
                             return True
                             
-                        # If we clicked on an image, handle rotation
+                        # If we clicked on an image, handle dragging
                         self.dragging = True
                         self.drag_start = event.pos
-                        self.initial_rotation = self.rotation
-                    else:
-                        # If we didn't click on an image, handle panning
-                        self.panning = True
-                        self.pan_start = event.pos
                 
                 elif event.button == 2:  # Middle click
                     pass  # Disabled middle click panning
@@ -949,7 +942,6 @@ class ImageProcessingCanvas:
                     self.dragged_image_id = None
                     self.clicked_image_id = None
                     self.click_start_pos = None
-                    self.panning = False
                     self.max_touch_points = 0
 
                     # Start relaxation if we were dragging
@@ -957,7 +949,6 @@ class ImageProcessingCanvas:
                         self.start_relaxation()
                 elif event.button == 3:  # Right click
                     self.dragging = False
-                    self.panning = False
                 elif event.button == 2:  # Middle click
                     pass  # Disabled middle click panning
             
@@ -1047,8 +1038,7 @@ class ImageProcessingCanvas:
                     # Two fingers down - enable multi-touch and disable panning
                     self.multi_touch = True
                     self.initial_touch_distance = dist(*active_touch_points)
-                    self.initial_touch_angle = atan2(active_touch_points[1][1] - active_touch_points[0][1],
-                                                   active_touch_points[1][0] - active_touch_points[0][0])
+                   
             
             elif event.type == pygame.FINGERUP:
                 # Remove the finger that was lifted
@@ -1079,7 +1069,7 @@ class ImageProcessingCanvas:
                 
                 # Check if we have multiple fingers touching the screen
                 if len(active_touch_points) >= 2:
-                    # We have multiple fingers - handle multi-touch for zoom and rotation
+                    # We have multiple fingers - handle multi-touch for zoom
                     self.multi_touch = True
                     
                     # Use only the first two touch points for calculations
@@ -1110,15 +1100,9 @@ class ImageProcessingCanvas:
                         # Apply zoom relative to center point
                         self.zoom_at_point(center, zoom_factor)
                     
-                    # Handle rotation
-                    current_angle = atan2(current_points[1][1] - current_points[0][1],
-                                        current_points[1][0] - current_points[0][0])
-                    self.rotation += current_angle - self.initial_touch_angle
-                    
                     # Update initial values for next frame
                     self.initial_touch_distance = current_distance
-                    self.initial_touch_angle = current_angle
-        
+                    
         return True
 
     def zoom_at_point(self, point, zoom_factor):
@@ -1269,11 +1253,10 @@ class ImageProcessingCanvas:
                     break
         
         # Apply transformations
-        transformed_surface = pygame.transform.rotozoom(surface, self.rotation, self.scale)
+        transformed_surface = pygame.transform.rotozoom(surface, 0, self.scale)
         
-        # Apply view offset to position
-        adjusted_pos = (pos[0] + self.view_offset_x, pos[1] + self.view_offset_y)
-        rect = transformed_surface.get_rect(center=adjusted_pos)
+        # Get the rect for the transformed surface
+        rect = transformed_surface.get_rect(center=pos)
         
         # Create a circular mask
         mask_surface = pygame.Surface(transformed_surface.get_size(), pygame.SRCALPHA)
@@ -1297,7 +1280,7 @@ class ImageProcessingCanvas:
         self.screen.blit(temp_surface, rect)
         
         # Draw white outline around the circle
-        pygame.draw.circle(self.screen, (255, 255, 255), adjusted_pos, radius, 2)
+        pygame.draw.circle(self.screen, (255, 255, 255), pos, radius, 2)
         
         # Render name if provided (for both proposals and images)
         if function_name:
@@ -1917,8 +1900,7 @@ class ImageProcessingCanvas:
             
             # Add view settings to the tree data
             tree_data['view_settings'] = {
-                'scale': self.scale,
-                'rotation': self.rotation
+                'scale': self.scale
             }
             
             # Create a timestamp for the filename
@@ -2000,7 +1982,6 @@ class ImageProcessingCanvas:
             # Extract view settings if present
             view_settings = tree_data.get('view_settings', {})
             self.scale = view_settings.get('scale', 1.0)
-            self.rotation = view_settings.get('rotation', 0)
             self.view_offset_x = view_settings.get('view_offset_x', 0)
             self.view_offset_y = view_settings.get('view_offset_y', 0)
                 
