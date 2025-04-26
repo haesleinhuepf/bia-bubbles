@@ -507,6 +507,7 @@ class ImageProcessingCanvas:
         self.touch_points = []
         self.initial_touch_distance = 0
         self.initial_touch_angle = 0
+        self.max_touch_points = 0
         
         # Add relaxation variables
         self.relaxing = False
@@ -790,6 +791,7 @@ class ImageProcessingCanvas:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
+                    self.max_touch_points = max(1, self.max_touch_points)
                     # Check if level button was clicked
                     if self.handle_level_button_click(event.pos):
                         continue
@@ -882,18 +884,7 @@ class ImageProcessingCanvas:
                                 self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
                                 image_clicked = True
                                 break
-                        
-                        # If no image was clicked and we have proposals, clear them and start panning
-                        if not image_clicked and self.temporary_proposals:
-                            self.temporary_proposals.clear()
-                            print("self.multi_touch", self.multi_touch)
-                            self.start_relaxation()
-                            self.panning = True
-                            self.pan_start = event.pos
-                        # If no image was clicked and no proposals, just start panning
-                        elif not image_clicked:
-                            self.panning = True
-                            self.pan_start = event.pos
+                    
                 
                 elif event.button == 3:  # Right click
                     # Check if we clicked on an image
@@ -930,13 +921,37 @@ class ImageProcessingCanvas:
                             # Process the image to show proposals
                             self.process_image(self.clicked_image_id)
                     
+
+                    image_clicked = False
+                    for img_id in self.images:
+                        # Skip result images
+                        if self.is_result_image(img_id):
+                            continue
+                            
+                        if self.point_in_image(event.pos, img_id):
+                            # Store click information for potential drag or click
+                            self.click_start_time = pygame.time.get_ticks()
+                            self.click_start_pos = event.pos
+                            self.clicked_image_id = img_id
+                            # Calculate offset from mouse to image center for potential drag
+                            img_pos = self.images[img_id].get_pos()
+                            self.drag_offset = (img_pos[0] - event.pos[0], img_pos[1] - event.pos[1])
+                            image_clicked = True
+                            break
+                    
+                    # If no image was clicked and we have proposals, clear them and start panning
+                    if not image_clicked and self.temporary_proposals and self.max_touch_points < 2:
+                        self.temporary_proposals.clear()
+                        print("self.multi_touch", self.multi_touch)
+
                     # Reset all states
                     self.dragging = False
                     self.dragged_image_id = None
                     self.clicked_image_id = None
                     self.click_start_pos = None
                     self.panning = False
-                    
+                    self.max_touch_points = 0
+
                     # Start relaxation if we were dragging
                     if self.dragging:
                         self.start_relaxation()
@@ -1027,6 +1042,7 @@ class ImageProcessingCanvas:
                 
                 # Check if we now have two fingers
                 active_touch_points = [p for p in self.touch_points if p is not None]
+                self.max_touch_points = len(active_touch_points)
                 if len(active_touch_points) == 2:
                     # Two fingers down - enable multi-touch and disable panning
                     self.multi_touch = True
@@ -1059,6 +1075,7 @@ class ImageProcessingCanvas:
                 
                 # Get active touch points (not None)
                 active_touch_points = [p for p in self.touch_points if p is not None]
+                self.max_touch_points = max(self.max_touch_points, len(active_touch_points))
                 
                 # Check if we have multiple fingers touching the screen
                 if len(active_touch_points) >= 2:
